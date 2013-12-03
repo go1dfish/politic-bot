@@ -1,0 +1,22 @@
+{
+  "name": "politic-bot",
+  "version": "0.0.1",
+  "description": "Reddit bots /u/ModerationLog and /u/PoliticBot",
+  "main": "politic-bot.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node politic-bot.js"
+  },
+  "dependencies": {
+    "couchbase": "1.1.1",
+    "eventsource": "0.0.10",
+    "handson-reddit": "0.0.0",
+    "rsvp": "2.0.4"
+  },
+  "author": "go1dfish",
+  "license": "BSD-2-Clause",
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/go1dfish/politic-bot.git"
+  }
+}

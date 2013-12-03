@@ -1,23 +1,12 @@
 var EventSource = require('eventsource'),
     couchbase   = require('./couchbase-rsvp'),
+    redditReq   = require('./reddit-request'),
     request     = require('request'),
     RSVP        = require('rsvp'),
-    subreddits  = [
-      'politics', 'worldnews', 'Canada', 'CanadaPolitics', 'Communism', 'News',
-      'Obama', 'evolutionReddit', 'Liberal', 'Progressive', 'Conservative',
-      'conservatives', 'Democrats', 'Republican', 'Libertarian', 'LibertarianLeft',
-      'ModeratePolitics', 'Anarchism', 'Bad_Cop_No_Donut', 'RonPaul', 'Conspiracy',
-      'PoliticalDiscussion', 'PoliticalHumor', 'AnythingGoesNews',
-      'AnythingGoesPolitics', 'Socialism', 'Wikileaks', 'WorldEvents', 'WorldPolitics',
-      'SOPA', 'StateoftheUnion', 'USPolitics', 'UKPolitics', 'Anarcho_Capitalism',
-      'Economy', 'Economics', 'DarkNetPlan', 'MensRights', 'WomensRights'
-    ],
-    subreddits = ['worldnews'],
-    USER_AGENT = 'politic-bot/0.2.0',
+    config      = require('./config'),
+    subreddits  = config.subreddits,
     MIRROR_SUBREDDIT = 'POLITIC',
     REPORT_SUBREDDIT = 'ModerationLog',
-    lastRedditRequestTimeByUrl = {},
-    lastRedditRequestTime,
     submissionEventSource;
 
 // Main entry point
@@ -33,8 +22,7 @@ couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
 });
 
 
-// Helper functions
-
+// Tasks
 function persistIncommingSubmissions(cb, url) {
   var eventSource = new EventSource(url);
   eventSource.onmessage = function(evt) {
@@ -86,7 +74,7 @@ function findRemovedNames(cb, subreddit) {
     var listedIds = Object.keys(results).sort(),
         oldestId = listedIds[0];
     console.log('listedIds', listedIds.length);
-    return recentIdsForSub(cb, subreddit, oldestId).then(function(recentIds) {
+    return getRecentIdsForSubreddit(cb, subreddit, oldestId).then(function(recentIds) {
       recentIds = recentIds.sort().reverse();
       newestId = recentIds[0];
       return recentIds.filter(function(id) {
@@ -111,7 +99,7 @@ function findRemovedPosts(cb, subreddit) {
   });
 }
 
-function recentIdsForSub(cb, subreddit, oldestId) {
+function getRecentIdsForSubreddit(cb, subreddit, oldestId) {
   return cb.queryView('reddit', 'recentIdsBySubreddit', {
     descending: true,
     startkey: [subreddit, {}],
@@ -158,9 +146,7 @@ function fetchSubredditListing(subreddit, after) {
   }
   return RSVP.Promise(function(resolve, reject) {
     redditReq(url, {
-      headers: {
-        'User-Agent': USER_AGENT
-      }
+      headers: {'User-Agent': config.userAgent}
     }, function(error, response, body) {
       if (error) {
         reject(error);
@@ -218,43 +204,13 @@ function mirrorPost(cb, post, destination) {
   });
 }
 
-function findUnmirroredPosts(cb) {
+function findUnmirroredUrls(cb) {
+}
+
+function getUnmirroredPosts(cb) {
   var view = cb.view('reddit', 'unmirroredPosts', {
         descending: true,
         startkey: [subreddit, {}],
         endkey: [subreddit, null]
       });
-}
-
-function redditReq(url) {
-  try {
-    var now = new Date(),
-        args = arguments,
-        minInterval = 2100,
-        minUrlInterval = 30100,
-        lastUrlInterval,
-        lastUrlTime = lastRedditRequestTimeByUrl[url],
-        interval = now - lastRedditRequestTime;
-    if (lastUrlTime) {
-      lastUrlInterval = now - lastUrlTime;
-    }
-    if (lastRedditRequestTime && interval < minInterval) {
-      setTimeout(function() {
-        redditReq.apply(this, args);
-      }, minInterval - interval + 100, arguments);
-    } else {
-      if (lastUrlInterval && lastUrlInterval < minUrlInterval) {
-        setTimeout(function() {
-          redditReq.apply(this, args);
-        }, minUrlInterval - lastUrlInterval + 100, arguments);
-      } else {
-        lastRedditRequestTime = now;
-        lastRedditRequestTimeByUrl[url] = now;
-        //console.log('requesting', url);
-        request.apply(this, arguments);
-      }
-    }
-  } catch(e) {
-    console.error('redditReq', e, e.stack);
-  }
 }

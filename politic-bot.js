@@ -31,6 +31,26 @@ connectToCouchbase({bucket: 'reddit-submissions'}).then(function(cb) {
 
 // Helper functions
 
+function persistIncommingSubmissions(cb, url) {
+  var eventSource = new EventSource(url);
+  eventSource.onmessage = function(evt) {
+    try {
+      var data = JSON.parse(evt.data);
+      persist(cb, data.name, data).then(function() {
+        console.log('New submission: ', 'http://reddit.com' + data.permalink);
+      }, function(err) {
+        console.error('Error persisting', err);
+      });
+    } catch(error) {
+      console.error(error, error.stack);
+    }
+  };
+  eventSource.onerror = function(error) {
+    console.error("Submission EventSource error", error);
+  }
+  return eventSource;
+}
+
 function pollForRemovals(cb, continuous) {
   var promise = RSVP.all(subreddits.map(function(subreddit) {
     return findRemovedPosts(cb, subreddit).then(function(results) {
@@ -86,6 +106,92 @@ function findRemovedPosts(cb, subreddit) {
   });
 }
 
+function recentIdsForSub(cb, subreddit, oldestId) {
+  var query = cb.view('dev_reddit', 'recentIdsBySubreddit', {
+        descending: true,
+        startkey: [subreddit, {}],
+        endkey: [subreddit, null]
+      });
+
+  return RSVP.Promise(function(resolve, reject) {
+    query.query(function(err, values) {
+      var results = [],
+          reachedOldestId = false;
+      if (err) {
+        reject(err);
+      } else {
+        values.forEach(function(value) {
+          if (!reachedOldestId) {
+            results.push(value);
+            if (oldestId && value.id === oldestId) {
+              reachedOldestId = true;
+            }
+          }
+        });
+        resolve(results.map(function(item) {return item.id;}));
+      }
+    });
+  });
+}
+
+function fetchSubredditListing(subreddit) {
+  return RSVP.Promise(function(resolve, reject) {
+    redditReq('http://reddit.com/r/' + subreddit + '/new.json', {
+      headers: {
+        'User-Agent': 'politic-bot/0.2.0'
+      }
+    }, function(error, response, body) {
+      if (error) {
+        reject(error);
+      } else {
+        var listing = JSON.parse(body),
+            results = {};
+        if (listing && listing.data && listing.data.children && listing.data.children.length) {
+          listing.data.children.forEach(function(submission) {
+            results[submission.data.name] = submission.data;
+          });
+          resolve(results);
+        } else {
+          resolve([]);
+        }
+      }
+    });
+  });
+}
+
+function redditReq(url) {
+  try {
+    var now = new Date(),
+        args = arguments,
+        minInterval = 2100,
+        minUrlInterval = 30100,
+        lastUrlInterval,
+        lastUrlTime = lastRedditRequestTimeByUrl[url],
+        interval = now - lastRedditRequestTime;
+    if (lastUrlTime) {
+      lastUrlInterval = now - lastUrlTime;
+    }
+    if (lastRedditRequestTime && interval < minInterval) {
+      setTimeout(function() {
+        redditReq.apply(this, args);
+      }, minInterval - interval + 100, arguments);
+    } else {
+      if (lastUrlInterval && lastUrlInterval < minUrlInterval) {
+        setTimeout(function() {
+          redditReq.apply(this, args);
+        }, minUrlInterval - lastUrlInterval + 100, arguments);
+      } else {
+        lastRedditRequestTime = now;
+        lastRedditRequestTimeByUrl[url] = now;
+        //console.log('requesting', url);
+        request.apply(this, arguments);
+      }
+    }
+  } catch(e) {
+    console.error('redditReq', e, e.stack);
+  }
+}
+
 function connectToCouchbase(args) {
   return RSVP.Promise(function(resolve, reject) {
     var cb = new couchbase.Connection(args, function(err) {
@@ -120,110 +226,4 @@ function multiget(cb, keys) {
       }
     });
   });
-}
-
-function persistIncommingSubmissions(cb, url) {
-  var eventSource = new EventSource(url);
-  eventSource.onmessage = function(evt) {
-    try {
-      var data = JSON.parse(evt.data);
-      persist(cb, data.name, data).then(function() {
-        console.log('New submission: ', 'http://reddit.com' + data.permalink);
-      }, function(err) {
-        console.error('Error persisting', err);
-      });
-    } catch(error) {
-      console.error(error, error.stack);
-    }
-  };
-  eventSource.onerror = function(error) {
-    console.error("Submission EventSource error", error);
-  }
-  return eventSource;
-}
-
-function recentIdsForSub(cb, subreddit, oldestId) {
-  var query = cb.view('dev_reddit', 'recentIdsBySubreddit', {
-        descending: true,
-        startkey: [subreddit, {}],
-        endkey: [subreddit, null]
-      });
-
-  return RSVP.Promise(function(resolve, reject) {
-    query.query(function(err, values) {
-      var results = [],
-          reachedOldestId = false;
-      if (err) {
-        reject(err);
-      } else {
-        values.forEach(function(value) {
-          if (!reachedOldestId) {
-            results.push(value);
-            if (oldestId && value.id === oldestId) {
-              reachedOldestId = true;
-            }
-          }
-        });
-        resolve(results.map(function(item) {return item.id;}));
-      }
-    });
-  });
-}
-
-function fetchSubredditListing(subreddit) {
-  return RSVP.Promise(function(resolve, reject) {
-    reddit_req('http://reddit.com/r/' + subreddit + '/new.json', {
-      headers: {
-        'User-Agent': 'politic-bot/0.2.0'
-      }
-    }, function(error, response, body) {
-      if (error) {
-        reject(error);
-      } else {
-        var listing = JSON.parse(body),
-            results = {};
-        if (listing && listing.data && listing.data.children && listing.data.children.length) {
-          listing.data.children.forEach(function(submission) {
-            results[submission.data.name] = submission.data;
-          });
-          resolve(results);
-        } else {
-          resolve([]);
-        }
-      }
-    });
-  });
-}
-
-function reddit_req(url) {
-  try {
-    var now = new Date(),
-        args = arguments,
-        minInterval = 2100,
-        minUrlInterval = 30100,
-        lastUrlInterval,
-        lastUrlTime = lastRedditRequestTimeByUrl[url],
-        interval = now - lastRedditRequestTime;
-    if (lastUrlTime) {
-      lastUrlInterval = now - lastUrlTime;
-    }
-    if (lastRedditRequestTime && interval < minInterval) {
-      setTimeout(function() {
-        reddit_req.apply(this, args);
-      }, minInterval - interval + 100, arguments);
-    } else {
-      if (lastUrlInterval && lastUrlInterval < minUrlInterval) {
-        setTimeout(function() {
-          reddit_req.apply(this, args);
-        }, minUrlInterval - lastUrlInterval + 100, arguments);
-      } else {
-        lastRedditRequestTime = now;
-        lastRedditRequestTimeByUrl[url] = now;
-        //console.log('requesting', url);
-        request.apply(this, arguments);
-      }
-    }
-  } catch(e) {
-    console.error('reddit_req', e, e.stack);
-  }
 }

@@ -117,26 +117,6 @@ function getRecentIdsForSubreddit(cb, subreddit, oldestId) {
     });
     return results.map(function(item) {return item.id;});
   });
-
-  return RSVP.Promise(function(resolve, reject) {
-    view.query(function(error, values) {
-      var results = [],
-          reachedOldestId = false;
-      if (error) {
-        reject(error);
-      } else {
-        values.forEach(function(value) {
-          if (!reachedOldestId) {
-            results.push(value);
-            if (oldestId && value.id === oldestId) {
-              reachedOldestId = true;
-            }
-          }
-        });
-        resolve(results.map(function(item) {return item.id;}));
-      }
-    });
-  });
 }
 
 function fetchSubredditListing(subreddit, after) {
@@ -177,12 +157,11 @@ function fetchSubredditListing(subreddit, after) {
 
 function selectUnmirroredSubmissions(cb) {
   return findUnmirrored(cb).then(function(unmirrored) {
-    unmirrored = unmirrored.map(function(i) {return i.value;}).filter(function(item) {
-      return !item.mirror_name;
-    }).map(function(item) {return item.name});
-    return fetchByRedditName(Object.keys(unmirrored)).then(function(submissions) {
-      return submissions;
-    });
+    return fetchByRedditName(
+      unmirrored.map(function(i) {return i.value;}).filter(function(item) {
+        return !item.mirror_name;
+      }).map(function(item) {return item.name})
+    );
   });
 }
 

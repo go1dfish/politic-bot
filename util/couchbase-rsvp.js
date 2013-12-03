@@ -2,6 +2,8 @@ var couchbase   = require('couchbase'),
     RSVP        = require('rsvp');
 
 function CouchRSVP(cb) {
+  var self = this;
+
   this.set = function(key, value) {
     return RSVP.Promise(function(resolve, reject) {
       cb.set(key, value, function(error) {
@@ -48,6 +50,16 @@ function CouchRSVP(cb) {
           resolve(results);
         }
       });
+    });
+  };
+
+  this.queryMultiGet = function(designDoc, viewName, args) {
+    return this.queryView(designDoc, viewName, args).then(function(results) {
+      var keys = results.map(function(item) {return item.id});
+      if (keys.length) {
+        return self.getMulti(keys);
+      }
+      return [];
     });
   }
 }

@@ -50,6 +50,24 @@ function Nodewhal(userAgent) {
     });
   };
 
+  self.flair = function(session, subreddit, linkName, template, flairText) {
+    console.log('session', session)
+    var form = {
+        api_type:   'json',
+        link:               linkName,
+        r:                  subreddit,
+        text:               flairText,
+        css_class:          template,
+        uh:                 session.modhash
+    };
+    console.log('form', form);
+    return self.post(baseUrl + '/r/' + subreddit + '/api/flair', {
+      form: form
+    }, session).then(function(result) {
+      console.log(JSON.stringify(result));
+    });
+  };
+
   self.listing = function(session, listingPath, max, after) {
     var url = baseUrl + listingPath + '.json',
         limit = max || 100;
@@ -57,7 +75,7 @@ function Nodewhal(userAgent) {
       url += '?limit=' + limit + '&after=' + after;
     }
     return self.get(url, {}, session).then(function(listing) {
-          results = {}, resultsLength;
+      var results = {}, resultsLength;
       if (listing && listing.data && listing.data.children && listing.data.children.length) {
         listing.data.children.forEach(function(submission) {
           results[submission.data.name] = submission.data;
@@ -101,13 +119,19 @@ function Nodewhal(userAgent) {
     return Nodewhal.respectRateLimits(url).then(function() {
       opts = opts || {};
       if (session && session.cookieJar) {
+        console.log('using session', session);
         opts.jar = session.cookieJar;
       }
       opts.headers = opts.headers || {};
       opts.headers['User-Agent'] = userAgent;
       return Nodewhal.rsvpRequest(method, url, opts);
     }).then(function(body) {
-      return JSON.parse(body);
+      try {
+        return JSON.parse(body);
+      } catch(e) {
+        console.log('Cant parse', body);
+        throw e;
+      }
     });
   };
 }

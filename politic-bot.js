@@ -10,13 +10,12 @@ var EventSource = require('eventsource'),
 // Main entry point
 couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
   try {
-    persistIncommingSubmissions(cb, 'http://api.rednit.com/submission_stream?eventsource=true&subreddit=' + subreddits.join('+'));
-    pollForRemovals(cb, 100);
-    /*
+    //persistIncommingSubmissions(cb, 'http://api.rednit.com/submission_stream?eventsource=true&subreddit=' + subreddits.join('+'));
+    //pollForRemovals(cb, 100);
     reddit.login(config.mirrorAccount.user, config.mirrorAccount.password).then(function(mirrorSession) {
+      console.log('logged in', mirrorSession);
       pollForMirrors(cb, mirrorSession, 30000);
     });
-    */
   } catch(error) {
     console.error('Bot error', error, error.stack);
   }
@@ -126,14 +125,21 @@ function getRecentIdsForSubreddit(cb, subreddit, oldestId) {
 
 function selectUnmirroredSubmissions(cb) {
   return findUnmirrored(cb).then(function(unmirrored) {
+    return Object.keys(unmirrored).map(
+      function(key) {return unmirrored[key].value;}
+    ).filter(function(item) {;
+      return !item.mirror_name;
+    });
+    /*
     return reddit.byName(null,
       // TODO: Sort/filter to find best posts to mirror
-      Object.keys(unmirrored).map(function(key) {return unmirrored[key];}).map(
+      return Object.keys(unmirrored).map(function(key) {return unmirrored[key];}).map(
         function(i) {return i.value;}).filter(function(item) {
           return !item.mirror_name;
         }
       ).map(function(item) {return item.name})
     );
+    */
   });
 }
 
@@ -152,6 +158,11 @@ function mirrorSubmission(cb, session, post, destination) {
     return reddit.submit(session, destination, 'link', postData.title, postData.url).then(function(mirror) {
       postData.mirror_name = mirror.name;
       return cb.set(postData.name, postData).then(function() {
+        console.log('mirrored', mirror)
+        console.log('postData.name', postData.name);
+        reddit.flair(session, destination, postData.name, 'meta',
+          postData.subreddit + '|' + postData.author
+        ).then(function(result) {console.log(result); return mirror;});
         return mirror;
       }, function(err) {
         console.log(err, err.stack);

@@ -1,12 +1,11 @@
 var EventSource = require('eventsource'),
     couchbase   = require('./util/couchbase-rsvp'),
-    redditReq   = require('./util/reddit-request'),
-    request     = require('request'),
+    Nodewhal    = require('./util/nodewhal'),
     RSVP        = require('rsvp'),
     config      = require('./config'),
     subreddits  = config.subreddits,
-    continuousInterval = require('./util/continuous-interval'),
-    submissionEventSource;
+    reddit      = new Nodewhal(config.userAgent),
+    continuousInterval = require('./util/continuous-interval');
 
 // Main entry point
 couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
@@ -70,7 +69,8 @@ function pollForMirrors(cb, interval) {
 }
 
 function findRemovedNames(cb, subreddit) {
-  return fetchSubredditListing(subreddit).then(function(results) {
+  return reddit.listing('/r/' + subreddit + '/new').then(function(results) {
+    console.log('findRemovedNames');
     var listedIds = Object.keys(results).sort(),
         oldestId = listedIds[0];
     console.log(subreddit, 'listedIds', listedIds.length);
@@ -116,42 +116,6 @@ function getRecentIdsForSubreddit(cb, subreddit, oldestId) {
       }
     });
     return results.map(function(item) {return item.id;});
-  });
-}
-
-function fetchSubredditListing(subreddit, after) {
-  var url = 'http://reddit.com/r/' + subreddit + '/new.json?limit=100';
-  if (after) {
-    url += '&after=' + after;
-  }
-  return RSVP.Promise(function(resolve, reject) {
-    redditReq(url, {
-      headers: {'User-Agent': config.userAgent}
-    }, function(error, response, body) {
-      if (error) {
-        reject(error);
-      } else {
-        var listing = JSON.parse(body),
-            results = {};
-        if (listing && listing.data && listing.data.children && listing.data.children.length) {
-          listing.data.children.forEach(function(submission) {
-            results[submission.data.name] = submission.data;
-          });
-          if (listing.data.after) {
-            fetchSubredditListing(subreddit, listing.data.after).then(function(moreResults) {
-              Object.keys(moreResults).forEach(function(key) {
-                results[key] = moreResults[key];
-              });
-              resolve(results);
-            }, function(error) {reject(error);});
-          } else {
-            resolve(results);
-          }
-        } else {
-          resolve({});
-        }
-      }
-    });
   });
 }
 

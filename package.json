@@ -8,7 +8,7 @@
     "start": "node politic-bot.js"
   },
   "dependencies": {
-    "couchbase": "1.1.1",
+    "couchbase": "git+ssh://git@github.com:couchbase/couchnode.git#master",
     "eventsource": "0.0.10",
     "handson-reddit": "0.0.0",
     "rsvp": "2.0.4",

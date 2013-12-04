@@ -5,7 +5,7 @@ function CouchRSVP(cb) {
   var self = this;
 
   this.set = function(key, value) {
-    return RSVP.Promise(function(resolve, reject) {
+    return new RSVP.Promise(function(resolve, reject) {
       cb.set(key, value, function(error) {
         if (error) {
           reject(error);
@@ -17,7 +17,7 @@ function CouchRSVP(cb) {
   };
 
   this.getMulti = function(keys, value) {
-    return RSVP.Promise(function(resolve, reject) {
+    return new RSVP.Promise(function(resolve, reject) {
       cb.getMulti(keys, null, function(error, results) {
         if (error) {
           reject(error);
@@ -29,7 +29,7 @@ function CouchRSVP(cb) {
   };
 
   this.get = function(key) {
-    return RSVP.Promise(function(resolve, reject) {
+    return new RSVP.Promise(function(resolve, reject) {
       cb.get(key, null, function(error, result) {
         if (error) {
           reject(error);
@@ -42,7 +42,7 @@ function CouchRSVP(cb) {
 
   this.queryView = function(designDoc, viewName, args) {
     var view = cb.view(designDoc, viewName, args);
-    return RSVP.Promise(function(resolve, reject) {
+    return new RSVP.Promise(function(resolve, reject) {
       view.query(function(error, results) {
         if (error) {
           reject(error);
@@ -66,7 +66,7 @@ function CouchRSVP(cb) {
 
 module.exports = {
   connect: function(args) {
-    return RSVP.Promise(function(resolve, reject) {
+    return new RSVP.Promise(function(resolve, reject) {
       var cb = new couchbase.Connection(args, function(err) {
         if (err) {
           reject(err);

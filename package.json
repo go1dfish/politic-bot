@@ -10,7 +10,7 @@
   "dependencies": {
     "couchbase": "git+ssh://git@github.com:couchbase/couchnode.git#master",
     "eventsource": "0.0.10",
-    "handson-reddit": "0.0.0",
+    "nodewhal": "git+ssh://git@github.com:go1dfish/nodewhal.git#master",
     "rsvp": "2.0.4",
     "request": "2.27.0"
   },

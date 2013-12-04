@@ -1,6 +1,6 @@
 var EventSource = require('eventsource'),
+    Nodewhal    = require('nodewhal'),
     couchbase   = require('./util/couchbase-rsvp'),
-    Nodewhal    = require('./util/nodewhal'),
     RSVP        = require('rsvp'),
     config      = require('./config'),
     subreddits  = config.subreddits,
@@ -160,6 +160,7 @@ function mirrorSubmission(cb, session, post, destination) {
     return reddit.submit(session, destination, 'link', postData.title, postData.url).then(function(mirror) {
       postData.mirror_name = mirror.name;
       return cb.set(postData.name, postData).then(function() {
+        console.log('mirror', mirror);
         return reddit.flair(session, destination, mirror.name, 'meta',
           postData.subreddit + '|' + postData.author
         ).then(function() {

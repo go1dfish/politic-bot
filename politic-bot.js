@@ -12,6 +12,11 @@ couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
   try {
     persistIncommingSubmissions(cb, 'http://api.rednit.com/submission_stream?eventsource=true&subreddit=' + subreddits.join('+'));
     pollForRemovals(cb, 100);
+    /*
+    reddit.login(config.mirrorAccount.user, config.mirrorAccount.password).then(function(mirrorSession) {
+      pollForMirrors(cb, mirrorSession, 30000);
+    });
+    */
   } catch(error) {
     console.error('Bot error', error, error.stack);
   }
@@ -60,16 +65,16 @@ function pollForRemovals(cb, interval) {
   }, interval);
 }
 
-function pollForMirrors(cb, interval) {
+function pollForMirrors(cb, session, interval) {
   return continuousInterval(function() {
     return selectUnmirroredSubmissions(cb).then(function(unmirrored) {
-      return mirrorSubmissions(cb, unmirrored);
+      return mirrorSubmissions(cb, session, unmirrored);
     });
   }, interval);
 }
 
 function findRemovedNames(cb, subreddit) {
-  return reddit.listing('/r/' + subreddit + '/new').then(function(results) {
+  return reddit.listing(null, '/r/' + subreddit + '/new').then(function(results) {
     console.log('findRemovedNames');
     var listedIds = Object.keys(results).sort(),
         oldestId = listedIds[0];
@@ -121,28 +126,37 @@ function getRecentIdsForSubreddit(cb, subreddit, oldestId) {
 
 function selectUnmirroredSubmissions(cb) {
   return findUnmirrored(cb).then(function(unmirrored) {
-    return fetchByRedditName(
-      unmirrored.map(function(i) {return i.value;}).filter(function(item) {
-        return !item.mirror_name;
-      }).map(function(item) {return item.name})
+    return reddit.byName(null,
+      // TODO: Sort/filter to find best posts to mirror
+      Object.keys(unmirrored).map(function(key) {return unmirrored[key];}).map(
+        function(i) {return i.value;}).filter(function(item) {
+          return !item.mirror_name;
+        }
+      ).map(function(item) {return item.name})
     );
   });
 }
 
-function mirrorSubmissions(cb, submissions) {
+function mirrorSubmissions(cb, session, submissions) {
   return RSVP.all(submissions.map(function(post) {
-    return mirrorSubmission(cb, post, config.mirrorSubreddit);
+    return mirrorSubmission(cb, session, post, config.mirrorSubreddit);
   }));
 }
 
-function mirrorSubmission(cb, post, destination) {
+function mirrorSubmission(cb, session, post, destination) {
   return cb.get(post.name).then(function(result) {
     var postData = result.value;
     if (postData.mirror_name) {
       throw "Already mirrored";
     }
-    return cb.set(postData.name, postData).then(function() {
-      return postData.mirror;
+    return reddit.submit(session, destination, 'link', postData.title, postData.url).then(function(mirror) {
+      postData.mirror_name = mirror.name;
+      return cb.set(postData.name, postData).then(function() {
+        return mirror;
+      }, function(err) {
+        console.log(err, err.stack);
+        throw err;
+      });
     });
   });
 }

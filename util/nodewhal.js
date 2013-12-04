@@ -10,14 +10,53 @@ function Nodewhal(userAgent) {
     userAgent = 'noob-nodewhal-dev-soon-to-be-ip-banned';
   }
 
-  self.listing = function(listingPath, max, after) {
+  self.login = function(username, password) {
+    var cookieJar = request.jar();
+    return self.post(baseUrl + '/api/login', {
+      form: {
+        api_type: 'json',
+        passwd:   password,
+        rem:      true,
+        user:     username
+      }
+    }, {cookieJar: cookieJar}).then(function(data) {
+      data = data.json.data;
+      data.cookieJar = cookieJar;
+      return data;
+    });
+  };
+
+  self.submit = function(session, subreddit, kind, title, urlOrText) {
+    urlOrText = urlOrText || '';
+    kind = (kind || 'link').toLowerCase();
+    var form = {
+        api_type: 'json',
+        kind:     kind,
+        title:    title,
+        sr:       subreddit,
+        uh:       session.modhash
+    };
+    if (kind === 'self' || ! urlOrText) {
+      form.text = urlOrText;
+    } else {
+      form.url = urlOrText;
+    }
+    return self.post(baseUrl + '/api/submit', {form: form}, session).then(function(data) {
+      if (data && data.json && data.json.errors && data.json.errors.length) {
+        throw data.json.errors;
+      }
+      if (data && data.json && data.json.data) {return data.json.data;}
+      return data;
+    });
+  };
+
+  self.listing = function(session, listingPath, max, after) {
     var url = baseUrl + listingPath + '.json',
         limit = max || 100;
     if (after) {
       url += '?limit=' + limit + '&after=' + after;
     }
-    return self.get(url).then(function(body) {
-      var listing = JSON.parse(body),
+    return self.get(url, {}, session).then(function(listing) {
           results = {}, resultsLength;
       if (listing && listing.data && listing.data.children && listing.data.children.length) {
         listing.data.children.forEach(function(submission) {
@@ -32,7 +71,7 @@ function Nodewhal(userAgent) {
           if (!typeof max === 'undefined') {
             max = max - resultsLength;
           }
-          return self.listing(listingPath, max, listing.data.after).then(function(moreResults) {
+          return self.listing(session, listingPath, max, listing.data.after).then(function(moreResults) {
             Object.keys(moreResults).forEach(function(key) {
               results[key] = moreResults[key];
             });
@@ -47,20 +86,41 @@ function Nodewhal(userAgent) {
     });
   };
 
-  self.get = function(url, opts) {
+  self.byName = function(session, names) {
+  }
+
+  self.get = function(url, opts, session) {
+    return self.req(url, 'get', opts, session);
+  };
+
+  self.post = function(url, opts, session) {
+    return self.req(url, 'post', opts, session);
+  };
+
+  self.req = function(url, method, opts, session) {
     return Nodewhal.respectRateLimits(url).then(function() {
       opts = opts || {};
+      if (session && session.cookieJar) {
+        opts.jar = session.cookieJar;
+      }
       opts.headers = opts.headers || {};
       opts.headers['User-Agent'] = userAgent;
-      return Nodewhal.promiseGetRequest(url, opts);
+      return Nodewhal.rsvpRequest(method, url, opts);
+    }).then(function(body) {
+      return JSON.parse(body);
     });
   };
 }
 
-Nodewhal.promiseGetRequest = function(url, opts) {
+Nodewhal.rsvpRequest = function(method, url, opts) {
   return new RSVP.Promise(function(resolve, reject) {
     console.log('requesting', url);
-    request(url, opts, function(error, response, body) {
+    if (!method || method === 'get') {
+      method = request;
+    } else {
+      method = request[method];
+    }
+    method(url, opts, function(error, response, body) {
       if (error) {
         reject(error);
       } else {

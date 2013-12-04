@@ -10,6 +10,10 @@ module.exports = {
     user:     'yourusername',
     password: 'yourpassword'
   },
+  filterDomains: [
+    'facebook.com',
+    'fbcdn.net'
+  ],
   subreddits: [
     'politics',
     'worldnews',
@@ -35,7 +39,6 @@ module.exports = {
     'PoliticalDiscussion',
     'PoliticalHumor',
     'AnythingGoesNews',
-    'AnythingGoesPolitics',
     'Socialism',
     'Wikileaks',
     'WorldEvents',

@@ -15,7 +15,7 @@ couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
       pollForMirrors(cb, session, 30000);
     });
     reddit.login(config.reportAccount.user, config.reportAccount.password).then(function(session) {
-      pollForRemovals(cb, session, 100);
+      pollForRemovals(cb, session, 10*60*1000);
     });
   } catch(error) {
     console.error('Bot error', error, error.stack);
@@ -130,7 +130,8 @@ function selectUnmirroredSubmissions(cb) {
     return Object.keys(unmirrored).map(
       function(key) {return unmirrored[key].value;}
     ).filter(function(item) {;
-      return !item.mirror_name;
+      console.log('domain', item.domain);
+      return !item.mirror_name && (config.filterDomains.indexOf(item.domain) === -1);
     });
     /*
     return reddit.byName(null,
@@ -160,11 +161,10 @@ function mirrorSubmission(cb, session, post, destination) {
     return reddit.submit(session, destination, 'link', postData.title, postData.url).then(function(mirror) {
       postData.mirror_name = mirror.name;
       return cb.set(postData.name, postData).then(function() {
-        console.log('mirror', mirror);
         return reddit.flair(session, destination, mirror.name, 'meta',
           postData.subreddit + '|' + postData.author
         ).then(function() {
-          console.log('mirrored', mirror)
+          console.log('mirrored to', mirror.url)
           return mirror;
         });
       });

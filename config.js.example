@@ -2,6 +2,14 @@ module.exports = {
   userAgent:        'politic-bot/0.2.0',
   mirrorSubreddit:  'POLITIC',
   reportSubreddit:  'ModerationLog',
+  mirrorAccount: {
+    user:     'yourusername',
+    password: 'yourpassword'
+  },
+  reportAccount: {
+    user:     'yourusername',
+    password: 'yourpassword'
+  },
   subreddits: [
     'politics',
     'worldnews',

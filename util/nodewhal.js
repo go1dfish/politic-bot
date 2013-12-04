@@ -61,7 +61,7 @@ function Nodewhal(userAgent) {
         uh:                 session.modhash
     };
     console.log('form', form);
-    return self.post(baseUrl + '/r/' + subreddit + '/api/flair', {
+    return self.post(baseUrl + '/api/flair', {
       form: form
     }, session).then(function(result) {
       console.log(JSON.stringify(result));
@@ -119,7 +119,6 @@ function Nodewhal(userAgent) {
     return Nodewhal.respectRateLimits(url).then(function() {
       opts = opts || {};
       if (session && session.cookieJar) {
-        console.log('using session', session);
         opts.jar = session.cookieJar;
       }
       opts.headers = opts.headers || {};

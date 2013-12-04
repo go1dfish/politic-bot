@@ -10,11 +10,12 @@ var EventSource = require('eventsource'),
 // Main entry point
 couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
   try {
-    //persistIncommingSubmissions(cb, 'http://api.rednit.com/submission_stream?eventsource=true&subreddit=' + subreddits.join('+'));
-    //pollForRemovals(cb, 100);
-    reddit.login(config.mirrorAccount.user, config.mirrorAccount.password).then(function(mirrorSession) {
-      console.log('logged in', mirrorSession);
-      pollForMirrors(cb, mirrorSession, 30000);
+    persistIncommingSubmissions(cb, 'http://api.rednit.com/submission_stream?eventsource=true&subreddit=' + subreddits.join('+'));
+    reddit.login(config.mirrorAccount.user, config.mirrorAccount.password).then(function(session) {
+      pollForMirrors(cb, session, 30000);
+    });
+    reddit.login(config.reportAccount.user, config.reportAccount.password).then(function(session) {
+      pollForRemovals(cb, session, 100);
     });
   } catch(error) {
     console.error('Bot error', error, error.stack);
@@ -43,10 +44,11 @@ function persistIncommingSubmissions(cb, url) {
   eventSource.onerror = function(error) {
     console.error("Submission EventSource error", error, error.stack);
   }
+  console.log('Listening for new submissions on', url);
   return eventSource;
 }
 
-function pollForRemovals(cb, interval) {
+function pollForRemovals(cb, session, interval) {
   return continuousInterval(function() {
     return RSVP.all(subreddits.map(function(subreddit) {
       return findRemovedSubmissions(cb, subreddit).then(function(results) {
@@ -158,16 +160,15 @@ function mirrorSubmission(cb, session, post, destination) {
     return reddit.submit(session, destination, 'link', postData.title, postData.url).then(function(mirror) {
       postData.mirror_name = mirror.name;
       return cb.set(postData.name, postData).then(function() {
-        console.log('mirrored', mirror)
-        console.log('postData.name', postData.name);
-        reddit.flair(session, destination, postData.name, 'meta',
+        return reddit.flair(session, destination, mirror.name, 'meta',
           postData.subreddit + '|' + postData.author
-        ).then(function(result) {console.log(result); return mirror;});
-        return mirror;
-      }, function(err) {
-        console.log(err, err.stack);
-        throw err;
+        ).then(function() {
+          console.log('mirrored', mirror)
+          return mirror;
+        });
       });
+    }, function(error) {
+      console.log('mirror error', error);
     });
   });
 }

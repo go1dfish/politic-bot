@@ -13,10 +13,11 @@ couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
   try {
     persistIncommingSubmissions(cb, 'http://api.rednit.com/submission_stream?eventsource=true&subreddit=' + subreddits.join('+'));
     reddit.login(config.mirrorAccount.user, config.mirrorAccount.password).then(function(session) {
-      pollForMirrors(cb, session, 1000);
+      pollForMirrors(cb, session, 100);
     });
     reddit.login(config.reportAccount.user, config.reportAccount.password).then(function(session) {
-      pollForRemovals(cb, session, 1000);
+      pollForRemovals(cb, session, 100);
+      pollForReports(cb, session, 100);
     });
   } catch(error) {
     console.error('Bot error', error, error.stack);
@@ -33,7 +34,7 @@ function persistIncommingSubmissions(cb, url) {
     try {
       var data = JSON.parse(evt.data);
       cb.set(data.name, data).then(function() {
-        console.log('New submission: ', 'http://reddit.com' + data.permalink);
+        console.log('incomming: ', 'http://reddit.com' + data.permalink);
       }, function(error) {
         console.error('Error persisting', error, error.stack);
         throw error;
@@ -51,7 +52,7 @@ function persistIncommingSubmissions(cb, url) {
 
 function pollForRemovals(cb, session, interval) {
   return continuousInterval(function() {
-    var subs = subreddits.slice(0);
+    var subs = shuffle(subreddits);
     function pollNextSubreddit() {
       return wait(interval).then(function() {
         var subreddit = subs.pop();
@@ -64,35 +65,6 @@ function pollForRemovals(cb, session, interval) {
   }, interval);
 }
 
-function pollRemovalsForSubreddit(cb, session, subreddit, interval) {
-  console.log('polling subreddit', subreddit);
-  return findRemovedSubmissions(cb, subreddit, interval).then(function(results) {
-    var keys = Object.keys(results);
-    if (keys.length) {
-      var removals = {};
-      keys.forEach(function(key) {
-        var submission = results[key].value;
-        if (!submission.disappeared) {
-          removals[key] = submission;
-          removals[key].disappeared = new Date();
-        }
-      });
-      if (Object.keys(removals).length) {
-        console.log('Detected removals',
-          Object.keys(removals).map(function(key) {
-            return 'http://www.reddit.com' + removals[key].permalink;
-          })
-        );
-      }
-      return cb.setMulti(removals).then(function() {
-        console.log('saved removals', removals);
-        return removals;
-      });
-    }
-    return {};
-  });
-}
-
 function pollForMirrors(cb, session, interval) {
   return continuousInterval(function() {
     return selectUnmirroredSubmissions(cb).then(function(unmirrored) {
@@ -101,11 +73,43 @@ function pollForMirrors(cb, session, interval) {
   }, interval);
 }
 
+function pollForReports(cb, session, interval) {
+  return continuousInterval(function() {
+    return findUnreportedRemoved(cb).then(function(unreported) {
+      return RSVP.all(Object.keys(unreported).map(function(key) {
+        return reportRemoval(cb, session, unreported[key].value, config.reportSubreddit);
+      }));
+    });
+  }, interval);
+}
+
+function pollRemovalsForSubreddit(cb, session, subreddit, interval) {
+  return findRemovedSubmissions(cb, subreddit, interval).then(function(results) {
+    var keys = Object.keys(results);
+    if (keys.length) {
+      var removals = {};
+      keys.forEach(function(key) {
+        var submission = results[key].value;
+        if (!submission.disappeared) {
+          removals[key] = submission;
+          removals[key].disappeared = new Date().getTime() / 1000;
+        }
+      });
+      if (Object.keys(removals).length) {
+        return cb.setMulti(removals).then(function() {
+          console.log('saved removals', removals);
+          return removals;
+        });
+      }
+    }
+    return {};
+  });
+}
+
 function findRemovedNames(cb, subreddit, interval) {
   return reddit.listing(null, '/r/' + subreddit + '/new', {wait: interval}).then(function(results) {
     var listedIds = Object.keys(results).sort(),
         oldestId = listedIds[0];
-    console.log(subreddit, 'listedIds', listedIds.length);
     return getRecentIdsForSubreddit(cb, subreddit, oldestId).then(function(recentIds) {
       recentIds = recentIds.sort().reverse();
       newestId = recentIds[0];
@@ -206,6 +210,22 @@ function mirrorSubmission(cb, session, post, destination) {
   });
 }
 
+function reportRemoval(cb, session, post, destination) {
+  return reddit.submit(session, destination, 'link',
+    post.title, 'http://reddit.com' + post.permalink
+  ).then(function(report) {
+    post.report_name = report.name;
+    return cb.set(post.name, post).then(function() {
+      return reddit.flair(session, destination, report.name, 'removed',
+        post.subreddit + '|' + post.author
+      ).then(function() {
+        console.log('reported to', report.url)
+        return report;
+      });
+    });
+  });
+}
+
 function findUnmirrored(cb) {
   return cb.queryMultiGet('reddit', 'submissionsByMirrorStateAndUrl', {
     startkey: [false, null],
@@ -215,8 +235,14 @@ function findUnmirrored(cb) {
 
 function findUnreportedRemoved(cb) {
   return cb.queryMultiGet('reddit', 'submissionsByDisappearedAndReported', {
-    startkey: [true, false, null],
-    endkey:   [true, false, {}]
+    startkey: [true, false],
+    endkey:   [true, false]
   });
 }
 
+//+ Jonas Raoni Soares Silva
+//@ http://jsfromhell.com/array/shuffle [v1.0]
+function shuffle(o){ //v1.0
+    for(var j, x, i = o.length; i; j = Math.floor(Math.random() * i), x = o[--i], o[i] = o[j], o[j] = x);
+    return o;
+};

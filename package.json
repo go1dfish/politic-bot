@@ -1,6 +1,6 @@
 {
   "name": "politic-bot",
-  "version": "0.0.2",
+  "version": "0.2.0",
   "description": "Reddit bots /u/ModerationLog and /u/PoliticBot",
   "main": "politic-bot.js",
   "scripts": {
@@ -15,7 +15,12 @@
     "request": "2.27.0"
   },
   "author": "go1dfish",
-  "license": "BSD-2-Clause",
+  "licenses": [
+    {
+      "type": "WTFPL",
+      "url": "https://github.com/go1dfish/politic-bot/blob/master/LICENSE"
+    }
+  ],
   "repository": {
     "type": "git",
     "url": "http://github.com/go1dfish/politic-bot.git"

@@ -34,7 +34,7 @@ function persistIncommingSubmissions(cb, url) {
     try {
       var data = JSON.parse(evt.data);
       cb.set(data.name, data).then(function() {
-        console.log('incomming: ', 'http://reddit.com' + data.permalink);
+        console.log('incomming:', 'http://www.reddit.com' + data.permalink);
       }, function(error) {
         console.error('Error persisting', error, error.stack);
         throw error;

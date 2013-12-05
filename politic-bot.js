@@ -52,7 +52,7 @@ function persistIncommingSubmissions(cb, url) {
 
 function pollForRemovals(cb, session, interval) {
   return continuousInterval(function() {
-    var subs = shuffle(subreddits);
+    var subs = shuffle(subreddits.slice(0));
     function pollNextSubreddit() {
       return wait(interval).then(function() {
         var subreddit = subs.pop();

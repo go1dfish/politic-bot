@@ -16,6 +16,12 @@ function CouchRSVP(cb) {
     });
   };
 
+  this.setMulti = function(values) {
+    return RSVP.all(Object.keys(values).map(function(key) {
+      return self.set(key, values[key]);
+    })).then(function() {return values});
+  };
+
   this.getMulti = function(keys, value) {
     return new RSVP.Promise(function(resolve, reject) {
       cb.getMulti(keys, null, function(error, results) {

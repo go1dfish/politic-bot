@@ -1,5 +1,6 @@
 var EventSource = require('eventsource'),
     Nodewhal    = require('nodewhal'),
+    wait        = Nodewhal.wait,
     couchbase   = require('./util/couchbase-rsvp'),
     RSVP        = require('rsvp'),
     config      = require('./config'),
@@ -12,10 +13,10 @@ couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
   try {
     persistIncommingSubmissions(cb, 'http://api.rednit.com/submission_stream?eventsource=true&subreddit=' + subreddits.join('+'));
     reddit.login(config.mirrorAccount.user, config.mirrorAccount.password).then(function(session) {
-      pollForMirrors(cb, session, 30000);
+      pollForMirrors(cb, session, 1000);
     });
     reddit.login(config.reportAccount.user, config.reportAccount.password).then(function(session) {
-      pollForRemovals(cb, session, 10*60*1000);
+      pollForRemovals(cb, session, 1000);
     });
   } catch(error) {
     console.error('Bot error', error, error.stack);
@@ -50,20 +51,46 @@ function persistIncommingSubmissions(cb, url) {
 
 function pollForRemovals(cb, session, interval) {
   return continuousInterval(function() {
-    return RSVP.all(subreddits.map(function(subreddit) {
-      return findRemovedSubmissions(cb, subreddit).then(function(results) {
-        var keys = Object.keys(results);
-        if (keys.length) {
-          console.log('Detected removals:', keys.map(function(key) {
-            return 'http://reddit.com' + results[key].value.permalink
-          }));
+    var subs = subreddits.slice(0);
+    function pollNextSubreddit() {
+      return wait(interval).then(function() {
+        var subreddit = subs.pop();
+        if (subreddit) {
+          return pollRemovalsForSubreddit(cb, session, subreddit, interval).then(pollNextSubreddit);
         }
-      }, function(error) {
-        console.error('pollForRemovals', error, error.stack);
-        throw error;
       });
-    }));
+    }
+    return pollNextSubreddit();
   }, interval);
+}
+
+function pollRemovalsForSubreddit(cb, session, subreddit, interval) {
+  console.log('polling subreddit', subreddit);
+  return findRemovedSubmissions(cb, subreddit, interval).then(function(results) {
+    var keys = Object.keys(results);
+    if (keys.length) {
+      var removals = {};
+      keys.forEach(function(key) {
+        var submission = results[key].value;
+        if (!submission.disappeared) {
+          removals[key] = submission;
+          removals[key].disappeared = new Date();
+        }
+      });
+      if (Object.keys(removals).length) {
+        console.log('Detected removals',
+          Object.keys(removals).map(function(key) {
+            return 'http://www.reddit.com' + removals[key].permalink;
+          })
+        );
+      }
+      return cb.setMulti(removals).then(function() {
+        console.log('saved removals', removals);
+        return removals;
+      });
+    }
+    return {};
+  });
 }
 
 function pollForMirrors(cb, session, interval) {
@@ -74,9 +101,8 @@ function pollForMirrors(cb, session, interval) {
   }, interval);
 }
 
-function findRemovedNames(cb, subreddit) {
-  return reddit.listing(null, '/r/' + subreddit + '/new').then(function(results) {
-    console.log('findRemovedNames');
+function findRemovedNames(cb, subreddit, interval) {
+  return reddit.listing(null, '/r/' + subreddit + '/new', {wait: interval}).then(function(results) {
     var listedIds = Object.keys(results).sort(),
         oldestId = listedIds[0];
     console.log(subreddit, 'listedIds', listedIds.length);
@@ -93,8 +119,8 @@ function findRemovedNames(cb, subreddit) {
   });
 }
 
-function findRemovedSubmissions(cb, subreddit) {
-  return findRemovedNames(cb, subreddit).then(function(names) {
+function findRemovedSubmissions(cb, subreddit, interval) {
+  return findRemovedNames(cb, subreddit, interval).then(function(names) {
     if (names && names.length) {
       return cb.getMulti(names);
     }
@@ -130,7 +156,6 @@ function selectUnmirroredSubmissions(cb) {
     return Object.keys(unmirrored).map(
       function(key) {return unmirrored[key].value;}
     ).filter(function(item) {;
-      console.log('domain', item.domain);
       return !item.mirror_name && (config.filterDomains.indexOf(item.domain) === -1);
     });
     /*
@@ -156,7 +181,7 @@ function mirrorSubmission(cb, session, post, destination) {
   return cb.get(post.name).then(function(result) {
     var postData = result.value;
     if (postData.mirror_name) {
-      throw "Already mirrored";
+      return {};
     }
     return reddit.submit(session, destination, 'link', postData.title, postData.url).then(function(mirror) {
       postData.mirror_name = mirror.name;
@@ -169,7 +194,14 @@ function mirrorSubmission(cb, session, post, destination) {
         });
       });
     }, function(error) {
-      console.log('mirror error', error);
+      postData.mirror_name = true;
+      if (error[0][0] === 'ALREADY_SUB') {
+        return cb.set(postData.name, postData).then(function() {
+          return {};
+        })
+      } else {
+        throw error;
+      }
     });
   });
 }
@@ -187,3 +219,4 @@ function findUnreportedRemoved(cb) {
     endkey:   [true, false, {}]
   });
 }
+

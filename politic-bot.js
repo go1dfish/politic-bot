@@ -1,21 +1,33 @@
 var EventSource = require('eventsource'),
+    fs          = require('fs'),
     entities    = new (require('html-entities').AllHtmlEntities)();
     Nodewhal    = require('nodewhal'),
+    Handlebars  = require('handlebars'),
     couchbase   = require('./util/couchbase-rsvp'),
     config      = require('./config'),
     subreddits  = config.subreddits,
     reddit      = new Nodewhal(config.userAgent);
+    reportCommentTemplate = Handlebars.compile(
+      fs.readFileSync('./templates/mirror-comment-template.hbs') + ''
+    ),
+    reportRemovalCommentTemplate = Handlebars.compile(
+      fs.readFileSync('./templates/report-removal-comment-template.hbs') + ''
+    ),
+    mirrorRemovalCommentTemplate = Handlebars.compile(
+      fs.readFileSync('./templates/mirror-removal-comment-template.hbs') + ''
+    ),
+    taskInterval = 1000;
 
 // Main entry point
 couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
   try {
     persistIncommingSubmissions(cb, 'http://api.rednit.com/submission_stream?eventsource=true&subreddit=' + subreddits.join('+'));
     reddit.login(config.mirrorAccount.user, config.mirrorAccount.password).then(function(session) {
-      pollForMirrors(cb, session, 100);
+      pollForMirrors(cb, session, taskInterval);
     });
     reddit.login(config.reportAccount.user, config.reportAccount.password).then(function(session) {
-      pollForRemovals(cb, session, 100);
-      pollForReports(cb, session, 100);
+      pollForRemovals(cb, session, taskInterval*100);
+      pollForReports(cb, session, taskInterval);
     });
   } catch(error) {
     console.error('Bot error', error, error.stack);
@@ -38,7 +50,7 @@ function persistIncommingSubmissions(cb, url) {
         throw error;
       });
     } catch(error) {
-      console.error(error, error.stack);
+      console.error(error.stack);
     }
   };
   eventSource.onerror = function(error) {
@@ -69,7 +81,7 @@ function pollForMirrors(cb, session, interval) {
 function pollForReports(cb, session, interval) {
   return Nodewhal.schedule.repeat(function() {
     return findUnreportedRemoved(cb).then(function(unreported) {
-      return Nodewhal.schedule.runInSerial(Object.keys(unreported).map(function(key) {
+      return Nodewhal.schedule.runInParallel(Object.keys(unreported).map(function(key) {
         return function() {
           return reportRemoval(cb, session, unreported[key].value, config.reportSubreddit);
         };
@@ -170,7 +182,7 @@ function selectUnmirroredSubmissions(cb) {
 }
 
 function mirrorSubmissions(cb, session, submissions, interval) {
-  return Nodewhal.schedule.runInSerial(submissions.map(function(post) {
+  return Nodewhal.schedule.runInParallel(submissions.map(function(post) {
     return function() {
       return mirrorSubmission(cb, session, post, config.mirrorSubreddit);
     };
@@ -183,38 +195,46 @@ function mirrorSubmission(cb, session, post, dest) {
     if (postData.mirror_name) {
       return {};
     }
-    reddit.checkForShadowban(post.author).then(function() {
+    return reddit.checkForShadowban(postData.author).then(function() {
       return reddit.submitted(session, dest, postData.url).then(function(submitted) {
-          console.log(JSON.stringify(submitted));
-        if (submitted[0].data) {
-          try {
-          postData.mirror_name = submitted[0].data.children[0].name;
+        if (typeof submitted === 'object') {
+          var mirror = submitted[0].data.children[0].data;
+          postData.mirror_name = mirror.name;
+          cb.set(mirror.name, mirror);
           return cb.set(postData.name, postData).then(function() {
-            console.log('already submitted', postData.url);
-            return {};
-          })
-          } catch(e) {console.log(e.stack)}
+            console.log('already submitted', postData.url, mirror.permalink);
+            return mirror;
+          });
         } else {
           return reddit.submit(session, dest, 'link',
             entities.decode(postData.title), postData.url
           ).then(function(mirror) {
             postData.mirror_name = mirror.name;
             return cb.set(postData.name, postData).then(function() {
+              reddit.comment(session, mirror.name,
+                reportCommentTemplate({
+                  post: postData,
+                  mirror: mirror
+                })
+              );
               return reddit.flair(session, dest, mirror.name, 'meta',
                 postData.subreddit + '|' + postData.author
               ).then(function() {
                 console.log('mirrored to', mirror.url)
                 return mirror;
               });
+            }, function(error) {
+              console.log(error, error.stack);
+              throw error;
             });
           });
         }
       });
     }, function(error) {
       if (error === 'shadowban') {
-        console.log(post.author, error);
-        post.mirror_name = 'shadowbanned';
-        return cb.set(post.name, post);
+        console.log(postData.author, error);
+        postData.mirror_name = 'shadowbanned';
+        cb.set(postData.name, postData);
       } else {
         console.error(post.author, error, error.stack);
       }
@@ -223,40 +243,70 @@ function mirrorSubmission(cb, session, post, dest) {
   });
 }
 
-function reportRemoval(cb, session, post, destination) {
+function reportRemoval(cb, session, post, dest) {
+  var url = "http://www.reddit.com" + post.permalink;
+
+  function flairReport(report) {
+    return reddit.flair(session, dest, report.name, 'removed',
+      post.subreddit + '|' + post.author
+    ).then(function() {
+      console.log('reported to', report.url)
+      return report;
+    });
+  }
+
   return reddit.checkForShadowban(post.author).then(function() {
-    return reddit.submit(session, destination, 'link',
-      entities.decode(post.title), 'http://reddit.com' + post.permalink
-    ).then(function(report) {
-      post.report_name = report.name;
-      return cb.set(post.name, post).then(function() {
-        return reddit.flair(session, destination, report.name, 'removed',
-          post.subreddit + '|' + post.author
-        ).then(function() {
-          console.log('reported to', report.url)
+    return reddit.submitted(session, dest, url).then(function(submitted) {
+      if (typeof submitted === 'object') {
+        var report = submitted[0].data.children[0].data;
+        post.report_name = report.name;
+        cb.set(report.name, report);
+        return cb.set(post.name, post).then(function() {
           return report;
         });
-      });
-    }, function(error) {
-      if (error[0][0] === 'ALREADY_SUB') {
-        postData.mirror_name = true;
-        return cb.set(postData.name, postData).then(function() {
-          return {};
-        })
       } else {
-        console.error(reportRemoval, error, error.stack);
-        throw error;
+        return reddit.submit(session, dest, 'link',
+          entities.decode(post.title), url
+        ).then(function(report) {
+          post.report_name = report.name;
+          cb.set(report.name, report);
+          if (post.mirror_name) {
+            reddit.comment(session, post.mirror_name,
+              '[Removed from /r/'+post.subreddit+'](' + report.url+')'
+            );
+            reddit.comment(session, report.name,
+              reportRemovalCommentTemplate({
+                post:   post,
+                report: report
+              })
+            );
+            if (post.mirror_name) {
+              cb.get(post.mirror_name).then(function(mirror) {
+                reddit.comment(session, report.name,
+                  reportRemovalCommentTemplate({
+                    post:   post,
+                    report: report,
+                    mirror: mirror
+                  })
+                );
+              });
+            }
+          }
+          return cb.set(post.name, post).then(function() {
+            return flairReport(report);
+          });
+        });
       }
+    }, function(error) {
+      if (error === 'shadowban') {
+        console.log(post.author, error);
+        post.report_name = 'shadowbanned';
+        return cb.set(post.name, post);
+      } else {
+        console.error(error, error.stack);
+      }
+      throw error;
     });
-  }, function(error) {
-    if (error === 'shadowban') {
-      console.log(post.author, error);
-      post.report_name = 'shadowbanned';
-      return cb.set(post.name, post);
-    } else {
-      console.error(error, error.stack);
-    }
-    throw error;
   });
 }
 

@@ -1,8 +1,8 @@
 # PoliticBot / ModerationLog
 
-This is a WIP re-implementation of the reddit bots /u/PoliticBot and /u/ModerationLog
+Reddit bot that mirrors political subreddits (PoliticBot) and then reports on posts removed by moderators (ModerationLog)
 
-By using rednit submission stream API's it is able to be much leaner than my original django implementation
+Used to power [/r/POLITIC](http://reddit.com/r/POLITIC) and [/r/ModerationLog](http://reddit.com/r/ModerationLog)
 
 ## Requirements
 

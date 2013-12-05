@@ -1,6 +1,6 @@
 {
   "name": "politic-bot",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Reddit bots /u/ModerationLog and /u/PoliticBot",
   "main": "politic-bot.js",
   "scripts": {
@@ -12,7 +12,8 @@
     "eventsource": "0.0.10",
     "nodewhal": "git+ssh://git@github.com:go1dfish/nodewhal.git#master",
     "rsvp": "2.0.4",
-    "request": "2.27.0"
+    "request": "2.27.0",
+    "html-entities": "1.0.10"
   },
   "author": "go1dfish",
   "licenses": [

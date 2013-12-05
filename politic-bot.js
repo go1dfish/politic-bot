@@ -1,4 +1,6 @@
 var EventSource = require('eventsource'),
+    Entities    = require('html-entities').AllHtmlEntities;
+    entities    = new Entities();
     Nodewhal    = require('nodewhal'),
     wait        = Nodewhal.wait,
     couchbase   = require('./util/couchbase-rsvp'),
@@ -97,7 +99,6 @@ function pollRemovalsForSubreddit(cb, session, subreddit, interval) {
       });
       if (Object.keys(removals).length) {
         return cb.setMulti(removals).then(function() {
-          console.log('saved removals', removals);
           return removals;
         });
       }
@@ -187,7 +188,9 @@ function mirrorSubmission(cb, session, post, destination) {
     if (postData.mirror_name) {
       return {};
     }
-    return reddit.submit(session, destination, 'link', postData.title, postData.url).then(function(mirror) {
+    return reddit.submit(session, destination, 'link',
+      entities.decode(postData.title), postData.url
+    ).then(function(mirror) {
       postData.mirror_name = mirror.name;
       return cb.set(postData.name, postData).then(function() {
         return reddit.flair(session, destination, mirror.name, 'meta',
@@ -212,7 +215,7 @@ function mirrorSubmission(cb, session, post, destination) {
 
 function reportRemoval(cb, session, post, destination) {
   return reddit.submit(session, destination, 'link',
-    post.title, 'http://reddit.com' + post.permalink
+    entities.decode(post.title), 'http://reddit.com' + post.permalink
   ).then(function(report) {
     post.report_name = report.name;
     return cb.set(post.name, post).then(function() {

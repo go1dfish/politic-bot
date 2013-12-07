@@ -8,9 +8,9 @@ var EventSource = require('eventsource'),
     RSVP        = require('rsvp'),
     subreddits  = config.subreddits,
     mirrors     = {},
-    reporter    = new Nodewhal(config.userAgent);
-    mirrorer    = new Nodewhal(config.userAgent);
-    anonymous   = new Nodewhal(config.userAgent);
+    reporter    = Nodewhal(config.userAgent),
+    mirrorer    = Nodewhal(config.userAgent),
+    anonymous   = Nodewhal(config.userAgent),
     mirrorCommentTemplate = Handlebars.compile(
       fs.readFileSync('./templates/mirror-comment-template.hbs') + ''
     ),
@@ -100,6 +100,7 @@ function pollRemovalsForSubreddit(cb, subreddit, interval, depth) {
         if (!submission.disappeared) {
           removals[key] = submission;
           removals[key].disappeared = new Date().getTime() / 1000;
+          console.log('disappeared', 'http://www.reddit.com/' + removals[key].permalink);
         }
       });
       if (Object.keys(removals).length) {
@@ -232,15 +233,17 @@ function mirrorSubmission(cb, post, dest) {
             postData.mirror_name = mirror.name;
             cb.set(mirror.name, mirror);
             return cb.set(postData.name, postData).then(function() {
-              mirrorer.comment(mirror.name,
-                mirrorCommentTemplate({
-                  post: postData,
-                  mirror: mirror
-                })
-              );
-              return mirrorer.flair(dest, mirror.name, 'meta',
-                postData.subreddit + '|' + postData.author
-              ).then(function() {return mirror;});
+              return RSVP.all([
+                mirrorer.comment(mirror.name,
+                  mirrorCommentTemplate({
+                    post: postData,
+                    mirror: mirror
+                  })
+                ),
+                mirrorer.flair(dest, mirror.name, 'meta',
+                  postData.subreddit + '|' + postData.author
+                )
+              ]).then(function() {return mirror;});
             });
           });
         }, function(error) {
@@ -276,59 +279,94 @@ function reportRemoval(cb, post, dest) {
       console.log('deleted post not reporting');
       return cb.set(post.name, post)
     }
-    return reporter.checkForShadowban(post.author).then(function() {
-      return reporter.submitted(dest, url).then(function(submitted) {
-        if (typeof submitted === 'object') {
-          var report = submitted[0].data.children[0].data;
-          post.report_name = report.name;
-          cb.set(report.name, report);
-          return cb.set(post.name, post).then(function() {
-            return report;
+    if (post.mirror_name && post.mirror_name !== 'shadowbanned' && post.mirror_name !== '[deleted]') {
+      mirrorer.duplicates(config.mirrorSubreddit, post.mirror_name).then(function(duplicates) {
+        var dupes = [], listed;
+        try {
+          duplicates.forEach(function(listing) {
+            if (listing && listing.data && listing.data.children) {
+              listing.data.children.forEach(function(child) {
+                dupes.push(child.data);
+              });
+            }
           });
+          listed = dupes.forEach(function(dupe) {
+            if (
+              dupe.subreddit === post.subreddit
+              && dupe.url === post.url
+            ) {
+              listed = dupe;
+            };
+          });
+        } catch(e) {
+          console.error(e.stack);
+          throw e;
+        }
+
+        if (listed) {
+          console.error('listed', listed);
+          post.disappeared = null;
+          return cb.set(post.name, post).then(function() {return {}});
         } else {
-          return reporter.submit(dest, 'link',
-            entities.decode(post.title), url
-          ).then(function(report) {
-            post.report_name = report.name;
-            cb.set(report.name, report);
-            return cb.set(post.name, post).then(function() {
-              if (post.mirror_name && post.mirror_name !== 'shadowbanned' && post.mirror_name !== '[deleted]') {
-                return mirrorer.byId(post.mirror_name).then(function(mirror) {
-                  return RSVP.all([
-                    mirrorer.flair(mirror.subreddit, mirror.name, 'removed',
-                      (mirror.link_flair_text)
-                    ),
-                    reporter.comment(mirror.name,
-                      '[Removed from /r/'+post.subreddit+'](' + report.url+')'
-                    ),
-                    reporter.comment(report.name,
-                      reportRemovalCommentTemplate({
-                        post:   updatedPost,
-                        report: report,
-                        mirror: mirror
-                      })
-                    ),
-                  ]).then(function() {return flairReport(report);});
-                }, function(error) {
-                  console.error('fetching mirror', error, error.stack);
-                  throw error;
+          try {
+            if (updatedPost.selftext_html && updatedPost.selftext_html.indexOf('[removed]') === -1) {
+              console.error('self text not removed', updatedPost);
+              post.disappeared = null;
+              return cb.set(post.name, post).then(function() {return {}});
+            }
+          } catch(e) {console.error(e.stack)}
+          return reporter.checkForShadowban(post.author).then(function() {
+            return reporter.submitted(dest, url).then(function(submitted) {
+              if (typeof submitted === 'object') {
+                var report = submitted[0].data.children[0].data;
+                post.report_name = report.name;
+                cb.set(report.name, report);
+                return cb.set(post.name, post).then(function() {
+                  return report;
+                });
+              } else {
+                return reporter.submit(dest, 'link',
+                  entities.decode(post.title), url
+                ).then(function(report) {
+                  post.report_name = report.name;
+                  cb.set(report.name, report);
+                  return cb.set(post.name, post).then(function() {
+                    return mirrorer.byId(post.mirror_name).then(function(mirror) {
+                      return RSVP.all([
+                        mirrorer.flair(mirror.subreddit, mirror.name, 'removed',
+                          (mirror.link_flair_text)
+                        ),
+                        reporter.comment(mirror.name,
+                          '[Removed from /r/'+post.subreddit+'](' + report.url+')'
+                        ),
+                        reporter.comment(report.name,
+                          reportRemovalCommentTemplate({
+                            post:   updatedPost,
+                            report: report,
+                            mirror: mirror
+                          })
+                        ),
+                      ]).then(function() {return flairReport(report);});
+                    });
+                  });
                 });
               }
-              return flairReport(report);
+            }, function(error) {
+              if (error === 'shadowban') {
+                console.log(post.author, error);
+                post.report_name = 'shadowbanned';
+                return cb.set(post.name, post);
+              } else {
+                console.error(error, error.stack);
+              }
+              throw error;
             });
           });
         }
-      }, function(error) {
-        if (error === 'shadowban') {
-          console.log(post.author, error);
-          post.report_name = 'shadowbanned';
-          return cb.set(post.name, post);
-        } else {
-          console.error(error, error.stack);
-        }
-        throw error;
       });
-    });
+    } else {
+      return {};
+    }
   });
 }
 

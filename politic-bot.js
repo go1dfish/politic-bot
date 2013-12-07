@@ -20,7 +20,7 @@ var EventSource = require('eventsource'),
     mirrorRemovalCommentTemplate = Handlebars.compile(
       fs.readFileSync('./templates/mirror-removal-comment-template.hbs') + ''
     ),
-    taskInterval = 50;
+    taskInterval = 2000;
 
 // Main entry point
 couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
@@ -36,9 +36,9 @@ couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
     config.reportAccount.user, config.reportAccount.password
   ).then(function(reporter) {
     // Shalow poll only 1 page per subreddit for recent removals
-    pollForRemovals(cb, taskInterval, 100);
+    pollForRemovals(cb, taskInterval*5, 100);
     // Deep poll up to 1000 submissions per subreddit for older removals
-    pollForRemovals(cb, taskInterval*100);
+    pollForRemovals(cb, taskInterval*20);
     // Periodically report removed submissions
     pollForReports(cb, taskInterval);
   });
@@ -83,7 +83,8 @@ function pollForReports(cb, interval) {
     return findUnreportedRemoved(cb).then(function(unreported) {
       return Nodewhal.schedule.runInSeries(Object.keys(unreported).map(function(key) {
         return function() {
-          return reportRemoval(cb, unreported[key].value, config.reportSubreddit);
+          var post = unreported[key].value;
+          return reportRemoval(cb, post, config.reportSubreddit);
         };
       }), interval);
     });
@@ -178,21 +179,31 @@ function selectUnmirroredSubmissions(cb) {
 function mirrorSubmissions(cb, submissions, interval) {
   return Nodewhal.schedule.runInSeries(submissions.map(function(post) {
     return function() {
-      return mirrorSubmission(cb, post, config.mirrorSubreddit);
+      return anonymous.aboutUser(post.author).then(function(author) {
+        var authorAge = post.created_utc - author.created_utc;
+        if (authorAge < config.minAuthorAge) {
+          console.error('Not mirroring, author too young', post.permalink);
+          post.mirror_name = 'authoryoung';
+          return cb.set(post.name, post).then(function() {return {};});
+        }
+        return mirrorSubmission(cb, post, config.mirrorSubreddit);
+      });
     };
   }), interval);
 }
 
-function mirrorSubmission(cb, post, dest) {
-  return cb.get(post.name).then(function(result) {
-    var postData = result.value;
-    if (!postData || postData.mirror_name) {
+function mirrorSubmission(cb, postData, dest) {
+  return cb.get(postData.name).then(function(post) {
+    if (post.value) {
+      post = post.value;
+    }
+    if (!post || post.mirror_name) {
       return {};
     }
-    if (mirrors[postData.url]) {
-      postData.mirror_name = mirrors[postData.url];
-      return cb.set(postData.name, postData).then(function() {
-        return cb.get(postData.mirror_name).then(function(data) {
+    if (mirrors[post.url]) {
+      post.mirror_name = mirrors[post.url];
+      return cb.set(post.name, post).then(function() {
+        return cb.get(post.mirror_name).then(function(data) {
           console.log('Used cached mirror', data.value.name);
           return data.value;
         });
@@ -213,44 +224,50 @@ function mirrorSubmission(cb, post, dest) {
       console.log('report post not mirroring');
       return cb.set(post.name, post)
     }
-    return mirrorer.submitted(dest, postData.url).then(function(submitted) {
+    return mirrorer.submitted(dest, post.url).then(function(submitted) {
       if (typeof submitted === 'object') {
         var mirror = submitted[0].data.children[0].data;
-        postData.mirror_name = mirror.name;
+        post.mirror_name = mirror.name;
 
         cb.set(mirror.name, mirror);
-        return cb.set(postData.name, postData).then(function() {
-          mirrors[postData.url] = mirror.name;
-          console.log('already submitted', postData.url, mirror.permalink);
+        return cb.set(post.name, post).then(function() {
+          mirrors[post.url] = mirror.name;
+          console.log('already submitted', post.url, mirror.permalink);
           return mirror;
         });
       } else {
-        return mirrorer.checkForShadowban(postData.author).then(function() {
+        return mirrorer.checkForShadowban(post.author).then(function() {
+          var title = post.title;
+          try {
+            title = entities.decode(title);
+          } catch(e) {
+            console.error('Error encoding title:', post, e);
+          }
           return mirrorer.submit(dest, 'link',
-            entities.decode(postData.title), postData.url
+            title, post.url
           ).then(function(mirror) {
-            mirrors[postData.url] = mirror.name;
-            postData.mirror_name = mirror.name;
+            mirrors[post.url] = mirror.name;
+            post.mirror_name = mirror.name;
             cb.set(mirror.name, mirror);
-            return cb.set(postData.name, postData).then(function() {
+            return cb.set(post.name, post).then(function() {
               return RSVP.all([
                 mirrorer.comment(mirror.name,
                   mirrorCommentTemplate({
-                    post: postData,
+                    post: post,
                     mirror: mirror
                   })
                 ),
                 mirrorer.flair(dest, mirror.name, 'meta',
-                  postData.subreddit + '|' + postData.author
+                  post.subreddit + '|' + post.author
                 )
               ]).then(function() {return mirror;});
             });
           });
         }, function(error) {
           if (error === 'shadowban') {
-            console.log(postData.author, error);
-            postData.mirror_name = 'shadowbanned';
-            cb.set(postData.name, postData);
+            console.log(post.author, error);
+            post.mirror_name = 'shadowbanned';
+            cb.set(post.name, post);
           } else {
             console.error(post.author, error, error.stack);
           }
@@ -272,6 +289,9 @@ function reportRemoval(cb, post, dest) {
       return report;
     });
   }
+  if (!post.mirror_name || post.mirror_name === 'shadowbanned' || post.mirror_name === '[deleted]' || post.mirror_name === 'authoryoung') {
+    return Nodewhal.schedule.wait();
+  }
 
   return reporter.byId(post.name).then(function(updatedPost) {
     if (updatedPost.author === '[deleted]') {
@@ -279,94 +299,90 @@ function reportRemoval(cb, post, dest) {
       console.log('deleted post not reporting');
       return cb.set(post.name, post)
     }
-    if (post.mirror_name && post.mirror_name !== 'shadowbanned' && post.mirror_name !== '[deleted]') {
-      mirrorer.duplicates(config.mirrorSubreddit, post.mirror_name).then(function(duplicates) {
-        var dupes = [], listed;
-        try {
-          duplicates.forEach(function(listing) {
-            if (listing && listing.data && listing.data.children) {
-              listing.data.children.forEach(function(child) {
-                dupes.push(child.data);
-              });
-            }
-          });
-          listed = dupes.forEach(function(dupe) {
-            if (
-              dupe.subreddit === post.subreddit
-              && dupe.url === post.url
-            ) {
-              listed = dupe;
-            };
-          });
-        } catch(e) {
-          console.error(e.stack);
-          throw e;
-        }
+    mirrorer.duplicates(config.mirrorSubreddit, post.mirror_name).then(function(duplicates) {
+      var dupes = [], listed;
+      try {
+        duplicates.forEach(function(listing) {
+          if (listing && listing.data && listing.data.children) {
+            listing.data.children.forEach(function(child) {
+              dupes.push(child.data);
+            });
+          }
+        });
+        listed = dupes.forEach(function(dupe) {
+          if (
+            dupe.subreddit === post.subreddit
+            && dupe.url === post.url
+          ) {
+            listed = dupe;
+          };
+        });
+      } catch(e) {
+        console.error(e.stack);
+        throw e;
+      }
 
-        if (listed) {
-          console.error('listed', listed);
-          post.disappeared = null;
-          return cb.set(post.name, post).then(function() {return {}});
-        } else {
-          try {
-            if (updatedPost.selftext_html && updatedPost.selftext_html.indexOf('[removed]') === -1) {
-              console.error('self text not removed', updatedPost);
-              post.disappeared = null;
-              return cb.set(post.name, post).then(function() {return {}});
-            }
-          } catch(e) {console.error(e.stack)}
-          return reporter.checkForShadowban(post.author).then(function() {
-            return reporter.submitted(dest, url).then(function(submitted) {
-              if (typeof submitted === 'object') {
-                var report = submitted[0].data.children[0].data;
+      if (listed) {
+        console.error('listed', listed);
+        post.disappeared = null;
+        return cb.set(post.name, post).then(function() {return {}});
+      } else {
+        try {
+          if (updatedPost.selftext_html && updatedPost.selftext_html.indexOf('[removed]') === -1) {
+            console.error('self text not removed', updatedPost);
+            post.disappeared = null;
+            return cb.set(post.name, post).then(function() {return {}});
+          }
+        } catch(e) {console.error(e.stack)}
+        return reporter.checkForShadowban(post.author).then(function() {
+          return reporter.submitted(dest, url).then(function(submitted) {
+            if (typeof submitted === 'object') {
+              var report = submitted[0].data.children[0].data;
+              post.report_name = report.name;
+              cb.set(report.name, report);
+              return cb.set(post.name, post).then(function() {
+                return report;
+              });
+            } else {
+              return reporter.submit(dest, 'link',
+                entities.decode(post.title), url
+              ).then(function(report) {
                 post.report_name = report.name;
                 cb.set(report.name, report);
                 return cb.set(post.name, post).then(function() {
-                  return report;
-                });
-              } else {
-                return reporter.submit(dest, 'link',
-                  entities.decode(post.title), url
-                ).then(function(report) {
-                  post.report_name = report.name;
-                  cb.set(report.name, report);
-                  return cb.set(post.name, post).then(function() {
-                    return mirrorer.byId(post.mirror_name).then(function(mirror) {
-                      return RSVP.all([
-                        mirrorer.flair(mirror.subreddit, mirror.name, 'removed',
-                          (mirror.link_flair_text)
-                        ),
-                        reporter.comment(mirror.name,
-                          '[Removed from /r/'+post.subreddit+'](' + report.url+')'
-                        ),
-                        reporter.comment(report.name,
-                          reportRemovalCommentTemplate({
-                            post:   updatedPost,
-                            report: report,
-                            mirror: mirror
-                          })
-                        ),
-                      ]).then(function() {return flairReport(report);});
-                    });
+                  return mirrorer.byId(post.mirror_name).then(function(mirror) {
+                    return RSVP.all([
+                      mirrorer.flair(mirror.subreddit, mirror.name, 'removed',
+                        (mirror.link_flair_text)
+                      ),
+                      reporter.comment(mirror.name,
+                        '[Removed from /r/'+post.subreddit+'](' + report.url+')'
+                      ),
+                      reporter.comment(report.name,
+                        reportRemovalCommentTemplate({
+                          post:   updatedPost,
+                          report: report,
+                          mirror: mirror
+                        })
+                      ),
+                    ]).then(function() {return flairReport(report);});
                   });
                 });
-              }
-            }, function(error) {
-              if (error === 'shadowban') {
-                console.log(post.author, error);
-                post.report_name = 'shadowbanned';
-                return cb.set(post.name, post);
-              } else {
-                console.error(error, error.stack);
-              }
-              throw error;
-            });
+              });
+            }
+          }, function(error) {
+            if (error === 'shadowban') {
+              console.log(post.author, error);
+              post.report_name = 'shadowbanned';
+              return cb.set(post.name, post);
+            } else {
+              console.error(error, error.stack);
+            }
+            throw error;
           });
-        }
-      });
-    } else {
-      return {};
-    }
+        });
+      }
+    });
   });
 }
 

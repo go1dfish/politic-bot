@@ -1,5 +1,5 @@
 module.exports = {
-  userAgent:        'politic-bot/0.2.0',
+  userAgent:        'politic-bot/0.2.6 by go1dfish',
   mirrorSubreddit:  'POLITIC',
   reportSubreddit:  'ModerationLog',
   mirrorAccount: {
@@ -10,6 +10,7 @@ module.exports = {
     user:     'yourusername',
     password: 'yourpassword'
   },
+  minAuthorAge: 60*60*1000,
   filterDomains: [
     'facebook.com',
     'fbcdn.net'

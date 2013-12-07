@@ -5,6 +5,7 @@ var EventSource = require('eventsource'),
     Handlebars  = require('handlebars'),
     couchbase   = require('./util/couchbase-rsvp'),
     config      = require('./config'),
+    RSVP        = require('rsvp'),
     subreddits  = config.subreddits,
     mirrors     = {},
     reporter    = new Nodewhal(config.userAgent);
@@ -191,7 +192,7 @@ function mirrorSubmission(cb, post, dest) {
       postData.mirror_name = mirrors[postData.url];
       return cb.set(postData.name, postData).then(function() {
         return cb.get(postData.mirror_name).then(function(data) {
-          console.log('Used cached mirror', data.value.permalink);
+          console.log('Used cached mirror', data.value.name);
           return data.value;
         });
       });
@@ -269,60 +270,64 @@ function reportRemoval(cb, post, dest) {
     });
   }
 
-  if (post && post.author === '[deleted]') {
-    post.report_name = '[deleted]'
-    console.log('deleted post not reporting');
-    return cb.set(post.name, post)
-  }
-
-  return reporter.checkForShadowban(post.author).then(function() {
-    return reporter.submitted(dest, url).then(function(submitted) {
-      if (typeof submitted === 'object') {
-        var report = submitted[0].data.children[0].data;
-        post.report_name = report.name;
-        cb.set(report.name, report);
-        return cb.set(post.name, post).then(function() {
-          return report;
-        });
-      } else {
-        return reporter.submit(dest, 'link',
-          entities.decode(post.title), url
-        ).then(function(report) {
+  return reporter.byId(post.name).then(function(updatedPost) {
+    if (updatedPost.author === '[deleted]') {
+      post.report_name = '[deleted]'
+      console.log('deleted post not reporting');
+      return cb.set(post.name, post)
+    }
+    return reporter.checkForShadowban(post.author).then(function() {
+      return reporter.submitted(dest, url).then(function(submitted) {
+        if (typeof submitted === 'object') {
+          var report = submitted[0].data.children[0].data;
           post.report_name = report.name;
           cb.set(report.name, report);
           return cb.set(post.name, post).then(function() {
-            if (post.mirror_name) {
-              mirrorer.byId(post.mirror_name, function(mirror) {
-                console.log('mirror', mirror);
-                mirror = mirror.value;
-                mirrorer.flair(mirror.subreddit, mirror.name, 'removed',
-                  (mirror.link_flair_text)
-                );
-                reporter.comment(mirror.name,
-                  '[Removed from /r/'+post.subreddit+'](' + report.url+')'
-                );
-                reporter.comment(report.name,
-                  reportRemovalCommentTemplate({
-                    post:   post,
-                    report: report,
-                    mirror: mirror
-                  })
-                );
-              });
-            }
-            return flairReport(report);
+            return report;
           });
-        });
-      }
-    }, function(error) {
-      if (error === 'shadowban') {
-        console.log(post.author, error);
-        post.report_name = 'shadowbanned';
-        return cb.set(post.name, post);
-      } else {
-        console.error(error, error.stack);
-      }
-      throw error;
+        } else {
+          return reporter.submit(dest, 'link',
+            entities.decode(post.title), url
+          ).then(function(report) {
+            post.report_name = report.name;
+            cb.set(report.name, report);
+            return cb.set(post.name, post).then(function() {
+              if (post.mirror_name && post.mirror_name !== 'shadowbanned' && post.mirror_name !== '[deleted]') {
+                return mirrorer.byId(post.mirror_name).then(function(mirror) {
+                  return RSVP.all([
+                    mirrorer.flair(mirror.subreddit, mirror.name, 'removed',
+                      (mirror.link_flair_text)
+                    ),
+                    reporter.comment(mirror.name,
+                      '[Removed from /r/'+post.subreddit+'](' + report.url+')'
+                    ),
+                    reporter.comment(report.name,
+                      reportRemovalCommentTemplate({
+                        post:   updatedPost,
+                        report: report,
+                        mirror: mirror
+                      })
+                    ),
+                  ]).then(function() {return flairReport(report);});
+                }, function(error) {
+                  console.error('fetching mirror', error, error.stack);
+                  throw error;
+                });
+              }
+              return flairReport(report);
+            });
+          });
+        }
+      }, function(error) {
+        if (error === 'shadowban') {
+          console.log(post.author, error);
+          post.report_name = 'shadowbanned';
+          return cb.set(post.name, post);
+        } else {
+          console.error(error, error.stack);
+        }
+        throw error;
+      });
     });
   });
 }

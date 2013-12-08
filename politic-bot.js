@@ -43,7 +43,7 @@ couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
     // Periodically report removed submissions
     pollForReports(cb, taskInterval);
     // Poll top 25 posts of mirror subreddit looking at other discussions tab
-    pollMirrorsForRemovals(cb, taskInterval, 25);
+    pollMirrorsForRemovals(cb, taskInterval*15, 25);
   });
 }, function(error) {
   console.error('Error connecting to couchbase', error, error.stack);
@@ -89,7 +89,9 @@ function pollMirrorsForRemovals(cb, interval, depth) {
       max: depth
     }).then(function(mirrored) {
       mirrored = Object.keys(mirrored).map(function(key) {return mirrored[key];});
-      return Nodewhal.schedule.runInSeries(shuffle(mirrored.map(function(mirror) {
+      return Nodewhal.schedule.runInSeries(shuffle(mirrored.filter(function(mirror) {
+        return isValidMirror(mirror);
+      }).map(function(mirror) {
         return function() {
           return checkMirrorForRemoval(cb, mirror, interval);
         }
@@ -102,11 +104,11 @@ function pollForReports(cb, interval) {
   return Nodewhal.schedule.repeat(function() {
     return findUnreportedRemoved(cb).then(function(unreported) {
       return Nodewhal.schedule.runInSeries(shuffle(Object.keys(unreported).map(function(key) {
+        return unreported[key].value;
+      }).filter(function(post) {
+        return isValidPost(post) && post.mirror_name && !post.report_name;
+      }).map(function(post) {
         return function() {
-          var post = unreported[key].value;
-          if (!post.mirror_name || !isValidPost(post)) {
-            return Nodewhal.schedule.wait();
-          }
           return cb.get(post.mirror_name).then(function(mirror) {
             return checkMirrorForRemoval(cb, mirror.value, interval);
           });
@@ -212,12 +214,8 @@ function mirrorSubmissions(cb, submissions, interval) {
         console.log('deleted post not mirroring');
         return cb.set(post.name, post).then(function() {return {};});
       }
-      if (post && (
-        post.subreddit === config.mirrorSubreddit
-        || post.subreddit === config.reportSubreddit
-      )) {
+      if (!isValidPost(post)) {
         post.mirror_name = post.name
-        console.log('mirror/report post not mirroring');
         return cb.set(post.name, post)
       }
       return anonymous.aboutUser(post.author).then(function(author) {
@@ -229,8 +227,9 @@ function mirrorSubmissions(cb, submissions, interval) {
         return mirrorSubmission(
           cb, post, config.mirrorSubreddit
         ).then(function(mirror) {
-          return mirror;
-          //return checkMirrorForRemoval(cb, mirror, interval);
+          return checkMirrorForRemoval(cb, mirror, interval).then(function() {
+            return mirror;
+          });
         }, function(error) {
           tempFail[post.name] = post;
           throw error;
@@ -259,14 +258,17 @@ function mirrorSubmission(cb, postData, dest) {
     }
     return mirrorer.submitted(dest, post.url).then(function(submitted) {
       if (typeof submitted === 'object') {
-        var mirror = submitted[0].data.children[0].data;
-        post.mirror_name = mirror.name;
+        var mirrorPost = submitted[0].data.children[0].data;
+        post.mirror_name = mirrorPost.name;
 
-        cb.set(mirror.name, mirror);
-        return cb.set(post.name, post).then(function() {
-          mirrors[post.url] = mirror.name;
-          console.log('already submitted', post.url, mirror.permalink);
-          return mirror;
+        return mirrorer.byId(mirrorPost.name).then(function(mirror) {
+          return cb.set(mirror.name, mirror).then(function() {
+            return cb.set(post.name, post).then(function() {
+              mirrors[post.url] = mirror.name;
+              console.log('already submitted', post.url, mirror.permalink);
+              return mirror;
+            });
+          });
         });
       } else {
         return mirrorer.checkForShadowban(post.author).then(function() {
@@ -278,23 +280,26 @@ function mirrorSubmission(cb, postData, dest) {
           }
           return mirrorer.submit(dest, 'link',
             title, post.url
-          ).then(function(mirror) {
-            mirrors[post.url] = mirror.name;
-            return mirrorer.byId(post.name).then(function(post) {
-              post.mirror_name = mirror.name;
-              cb.set(mirror.name, mirror);
-              return cb.set(post.name, post).then(function() {
-                return RSVP.all([
-                  mirrorer.comment(mirror.name,
-                    mirrorCommentTemplate({
-                      post: post,
-                      mirror: mirror
-                    })
-                  ),
-                  mirrorer.flair(dest, mirror.name, 'meta',
-                    post.subreddit + '|' + post.author
-                  )
-                ]).then(function() {return mirror;});
+          ).then(function(mirrorPost) {
+            return mirrorer.byId(mirrorPost.name).then(function(mirror) {
+              mirrors[post.url] = mirror.name;
+              return mirrorer.byId(post.name).then(function(post) {
+                post.mirror_name = mirror.name;
+                return cb.set(mirror.name, mirror).then(function() {
+                  return cb.set(post.name, post).then(function() {
+                    return RSVP.all([
+                      mirrorer.comment(mirror.name,
+                        mirrorCommentTemplate({
+                          post: post,
+                          mirror: mirror
+                        })
+                      ),
+                      mirrorer.flair(dest, mirror.name, 'meta',
+                        post.subreddit + '|' + post.author
+                      )
+                    ]).then(function() {return mirror;});
+                  });
+                });
               });
             });
           });
@@ -312,6 +317,7 @@ function mirrorSubmission(cb, postData, dest) {
     });
   });
 }
+
 function checkMirrorForRemoval(cb, mirror, interval) {
   if (tempFail[mirror.name]) {
     return Nodewhal.schedule.wait();
@@ -319,55 +325,63 @@ function checkMirrorForRemoval(cb, mirror, interval) {
   if (!isValidMirror(mirror)) {
     return Nodewhal.schedule.wait();
   }
-  return anonymous.duplicates(
-    config.mirrorSubreddit, mirror.name
-  ).then(function(duplicates) {
-    var dupes = [];
-    duplicates.forEach(function(listing) {
-      if (listing && listing.data && listing.data.children) {
-        listing.data.children.forEach(function(child) {
-          dupes.push(child.data);
-        });
+  return findMirroredForUrl(cb, mirror.url).then(function(knownPosts) {
+    var knownSubs = [],
+        removedSubs = [],
+        posts = {};
+    knownPosts.forEach(function(known) {
+      if (knownSubs.indexOf(known.subreddit) < 0 && isValidPost(known)) {
+        knownSubs.push(known.subreddit);
+        posts[known.subreddit] = known;
+        if (known.disappeared) {
+          known.disappeared = null;
+          cb.set(known.name, known);
+        }
       }
     });
-    return findMirroredForUrl(cb, mirror.url).then(function(knownPosts) {
-      var subs = [],
-          posts = {};
-      knownPosts.forEach(function(known) {
-        if (subs.indexOf(known.subreddit) < 0) {
-          posts[known.subreddit] = known;
-          subs.push(known.subreddit);
-          if (known.disappeared) {
-            known.disappeared = null;
-            cb.set(known.name, known);
-          }
+    if (!knownSubs.length) {
+      return Nodewhal.schedule.wait();
+    }
+    return anonymous.duplicates(
+      config.mirrorSubreddit, mirror.name
+    ).then(function(duplicates) {
+      var dupes = [];
+      duplicates.forEach(function(listing) {
+        if (listing && listing.data && listing.data.children) {
+          listing.data.children.forEach(function(child) {
+            if (isValidPost(child.data)) {
+              dupes.push(child.data);
+            }
+          });
         }
       });
-      dupes.forEach(function(dupe) {
-        var index = subreddits.indexOf(dupe.subreddit);
-        if (index > -1) {
-          subs = subs.splice(index, 1);
+      knownSubs.forEach(function(sub) {
+        var posts = dupes.filter(function(dupe) {return dupe.subreddit === sub;});
+        if (posts.length === 0) {
+          removedSubs.push(sub);
         }
       });
       if (mirror.url.indexOf('reddit.com/') >= 0) {
         // reportRemoval will determine if self post is removed
-        return Nodewhal.schedule.runInSeries(subs.map(function(sub) {
+        return Nodewhal.schedule.runInSeries(removedSubs.map(function(sub) {
           var post = posts[sub];
-          return reportRemoval(cb, post, config.reportSubreddit);
-        }));
-      }
-      if (subs.length) {
-        return Nodewhal.schedule.runInSeries(subs.map(function(sub) {
-          post = posts[sub];
-          post.mirror_name = mirror.name
           return function() {
-            if (post.disappeared || post.report_name) {
-              return Nodewhal.schedule.wait();
-            }
-            console.error('checking post', post.permalink);
             return reportRemoval(cb, post, config.reportSubreddit);
           };
-        }), interval);
+        }));
+      }
+      if (removedSubs.length) {
+        return Nodewhal.schedule.runInSeries(shuffle(removedSubs.map(function(sub) {
+          var post = posts[sub];
+          post.mirror_name = mirror.name
+          return post;
+        }).filter(function(post) {
+          return isValidPost(post) && !post.report_name;
+        }).map(function(post) {
+          return function() {
+            return reportRemoval(cb, post, config.reportSubreddit);
+          };
+        })), interval);
       }
     });
   }, function(error) {
@@ -468,6 +482,8 @@ function findMirroredForUrl(cb, url) {
   }).then(function(values) {
     return Object.keys(values).map(function(key) {
       return values[key].value;
+    }).filter(function(post) {
+      return post.url === url;
     });
   });
 }

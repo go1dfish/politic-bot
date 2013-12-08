@@ -1,5 +1,5 @@
 module.exports = {
-  userAgent:        'politic-bot/0.3.0 by go1dfish',
+  userAgent:        'politic-bot/0.3.1 by go1dfish',
   mirrorSubreddit:  'POLITIC',
   reportSubreddit:  'ModerationLog',
   mirrorAccount: {

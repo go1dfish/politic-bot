@@ -110,7 +110,10 @@ function pollForReports(cb, interval) {
       }).map(function(post) {
         return function() {
           return cb.get(post.mirror_name).then(function(mirror) {
-            return checkMirrorForRemoval(cb, mirror.value, interval);
+            if (tempFail[mirror.name]) {
+              return Nodewhal.schedule.wait();
+            }
+            return checkMirrorForRemoval(cb, mirror.value, interval, post);
           });
         };
       })), interval);
@@ -227,7 +230,7 @@ function mirrorSubmissions(cb, submissions, interval) {
         return mirrorSubmission(
           cb, post, config.mirrorSubreddit
         ).then(function(mirror) {
-          return checkMirrorForRemoval(cb, mirror, interval).then(function() {
+          return checkMirrorForRemoval(cb, mirror, interval, post).then(function() {
             return mirror;
           });
         }, function(error) {
@@ -265,7 +268,6 @@ function mirrorSubmission(cb, postData, dest) {
           return cb.set(mirror.name, mirror).then(function() {
             return cb.set(post.name, post).then(function() {
               mirrors[post.url] = mirror.name;
-              console.log('already submitted', post.url, mirror.permalink);
               return mirror;
             });
           });
@@ -288,14 +290,14 @@ function mirrorSubmission(cb, postData, dest) {
                 return cb.set(mirror.name, mirror).then(function() {
                   return cb.set(post.name, post).then(function() {
                     return RSVP.all([
+                      mirrorer.flair(dest, mirror.name, 'meta',
+                        post.subreddit + '|' + post.author
+                      ),
                       mirrorer.comment(mirror.name,
                         mirrorCommentTemplate({
                           post: post,
                           mirror: mirror
                         })
-                      ),
-                      mirrorer.flair(dest, mirror.name, 'meta',
-                        post.subreddit + '|' + post.author
                       )
                     ]).then(function() {return mirror;});
                   });
@@ -318,7 +320,7 @@ function mirrorSubmission(cb, postData, dest) {
   });
 }
 
-function checkMirrorForRemoval(cb, mirror, interval) {
+function checkMirrorForRemoval(cb, mirror, interval, post) {
   if (tempFail[mirror.name]) {
     return Nodewhal.schedule.wait();
   }
@@ -329,6 +331,9 @@ function checkMirrorForRemoval(cb, mirror, interval) {
     var knownSubs = [],
         removedSubs = [],
         posts = {};
+    if (post) {
+      knownPosts.push(post);
+    }
     knownPosts.forEach(function(known) {
       if (knownSubs.indexOf(known.subreddit) < 0 && isValidPost(known)) {
         knownSubs.push(known.subreddit);
@@ -340,6 +345,7 @@ function checkMirrorForRemoval(cb, mirror, interval) {
       }
     });
     if (!knownSubs.length) {
+      console.error('No known posts for', mirror.permalink);
       return Nodewhal.schedule.wait();
     }
     return anonymous.duplicates(
@@ -402,7 +408,7 @@ function reportRemoval(cb, post, dest) {
       return report;
     });
   }
-  if (!post.mirror_name || !isValidPost(post)) {
+  if (!post.mirror_name || !isValidPost(post) || post.report_name) {
     return Nodewhal.schedule.wait();
   }
 

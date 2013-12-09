@@ -56,6 +56,7 @@ function persistIncommingSubmissions(cb, subreddits) {
   return anonymous.startSubmissionStream(function(submission) {
     cb.set(submission.name, submission).then(function() {
       console.log('incomming:', 'http://www.reddit.com' + submission.permalink);
+      mirrorSubmissions(cb, [submission]);
     }, function(error) {
       console.error('Error persisting', error.stack || error);
       throw error;
@@ -338,10 +339,6 @@ function checkMirrorForRemoval(cb, mirror, interval, post) {
       if (knownSubs.indexOf(known.subreddit) < 0 && isValidPost(known)) {
         knownSubs.push(known.subreddit);
         posts[known.subreddit] = known;
-        if (known.disappeared) {
-          known.disappeared = null;
-          cb.set(known.name, known);
-        }
       }
     });
     if (!knownSubs.length) {
@@ -377,6 +374,7 @@ function checkMirrorForRemoval(cb, mirror, interval, post) {
         }));
       }
       if (removedSubs.length) {
+
         return Nodewhal.schedule.runInSeries(shuffle(removedSubs.map(function(sub) {
           var post = posts[sub];
           post.mirror_name = mirror.name
@@ -385,7 +383,16 @@ function checkMirrorForRemoval(cb, mirror, interval, post) {
           return isValidPost(post) && !post.report_name;
         }).map(function(post) {
           return function() {
-            return reportRemoval(cb, post, config.reportSubreddit);
+            return anonymous.duplicates(
+              post.subreddit, post.name
+            ).then(function(postDuplicates) {
+              if (postDuplicates.length && postDuplicates.length > 1) {
+                return reportRemoval(cb, post, config.reportSubreddit);
+              } else {
+                console.error('post without dupes', post, postDuplicates);
+                return Nodewhal.schedule.wait();
+              }
+            });
           };
         })), interval);
       }
@@ -483,7 +490,7 @@ function findUnmirrored(cb) {
 
 function findMirroredForUrl(cb, url) {
   return cb.queryMultiGet('reddit', 'submissionsByMirrorStateAndUrl', {
-    startkey: [true, url],
+    startkey: [false, url],
     endkey:   [true, url]
   }).then(function(values) {
     return Object.keys(values).map(function(key) {

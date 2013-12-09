@@ -275,14 +275,16 @@ function mirrorSubmission(cb, postData, dest) {
         });
       } else {
         return mirrorer.checkForShadowban(post.author).then(function() {
-          var title = post.title;
+          var title = post.title,
+              url = post.url;
           try {
             title = entities.decode(title);
+            url = entities.decode(url);
           } catch(e) {
             console.error('Error encoding title:', post, e);
           }
           return mirrorer.submit(dest, 'link',
-            title, post.url
+            title, url
           ).then(function(mirrorPost) {
             return mirrorer.byId(mirrorPost.name).then(function(mirror) {
               mirrors[post.url] = mirror.name;

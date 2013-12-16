@@ -438,7 +438,9 @@ function reportRemoval(cb, post, dest) {
       return cb.set(post.name, post);
     }
     try {
-      if (updatedPost.selftext_html && updatedPost.selftext_html.indexOf('[removed]') === -1) {
+      if (  updatedPost.domain === ('self.' + post.subreddit)
+            && updatedPost.selftext_html.indexOf('[removed]') === -1
+      ) {
         post.disappeared = null;
         return cb.set(post.name, post).then(function() {return {}});
       }

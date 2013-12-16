@@ -12,6 +12,7 @@ var EventSource = require('eventsource'),
     mirrorer    = Nodewhal(config.userAgent),
     anonymous   = Nodewhal(config.userAgent),
     tempFail = {},
+    additionalMirrors = config.additionalMirrors,
     mirrorCommentTemplate = Handlebars.compile(
       fs.readFileSync('./templates/mirror-comment-template.hbs') + ''
     ),
@@ -37,7 +38,7 @@ couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
     config.reportAccount.user, config.reportAccount.password
   ).then(function(reporter) {
     // Shalow poll only 1 page per subreddit for recent removals
-    pollForRemovals(cb, taskInterval, 100);
+    pollForRemovals(cb, taskInterval*10, 100);
     // Deep poll up to 1000 submissions per subreddit for older removals
     pollForRemovals(cb, taskInterval*30);
     // Periodically report removed submissions
@@ -52,10 +53,9 @@ couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
 
 // Tasks
 function persistIncommingSubmissions(cb, subreddits) {
-  console.log('Listening for new submissions', subreddits.join(','));
   return anonymous.startSubmissionStream(function(submission) {
     cb.set(submission.name, submission).then(function() {
-      console.log('incomming:', 'http://www.reddit.com' + submission.permalink);
+      console.log('new:', 'http://www.reddit.com' + submission.permalink);
       mirrorSubmissions(cb, [submission]);
     }, function(error) {
       console.error('Error persisting', error.stack || error);
@@ -215,7 +215,6 @@ function mirrorSubmissions(cb, submissions, interval) {
       }
       if (post.author === '[deleted]') {
         post.mirror_name = '[deleted]';
-        console.log('deleted post not mirroring');
         return cb.set(post.name, post).then(function() {return {};});
       }
       if (!isValidPost(post)) {
@@ -255,12 +254,11 @@ function mirrorSubmission(cb, postData, dest) {
       post.mirror_name = mirrors[post.url];
       return cb.set(post.name, post).then(function() {
         return cb.get(post.mirror_name).then(function(data) {
-          console.log('Used cached mirror', data.value.name);
           return data.value;
         });
       });
     }
-    return mirrorer.submitted(dest, post.url).then(function(submitted) {
+    var promise = mirrorer.submitted(dest, post.url).then(function(submitted) {
       if (typeof submitted === 'object') {
         var mirrorPost = submitted[0].data.children[0].data;
         post.mirror_name = mirrorPost.name;
@@ -320,6 +318,20 @@ function mirrorSubmission(cb, postData, dest) {
         });
       }
     });
+    if (additionalMirrors[post.subreddit]) {
+      var title = post.title,
+          url = post.url;
+      try {
+        title = entities.decode(title);
+        url = entities.decode(url);
+      } catch(e) {
+        console.error('Error encoding title:', post, e);
+      }
+      mirrorer.submit(additionalMirrors[post.subreddit], 'link',
+        title, url
+      );
+    }
+    return promise;
   });
 }
 
@@ -413,7 +425,6 @@ function reportRemoval(cb, post, dest) {
     return reporter.flair(dest, report.name, 'removed',
       post.subreddit + '|' + post.author
     ).then(function() {
-      console.log('reported to', report.url)
       return report;
     });
   }
@@ -424,7 +435,6 @@ function reportRemoval(cb, post, dest) {
   return reporter.byId(post.name).then(function(updatedPost) {
     if (updatedPost.author === '[deleted]') {
       post.report_name = '[deleted]'
-      console.log('deleted post not reporting');
       return cb.set(post.name, post);
     }
     try {

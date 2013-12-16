@@ -57,5 +57,7 @@ module.exports = {
     'ElectionPolls',
     'postnationalist',
     'CryptoAnarchy'
-  ]
+  ],
+  additionalMirrors: {
+  }
 };

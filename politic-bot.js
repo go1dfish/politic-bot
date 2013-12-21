@@ -281,30 +281,35 @@ function mirrorSubmission(cb, postData, dest) {
           } catch(e) {
             console.error('Error encoding title:', post, e);
           }
-          return mirrorer.submit(dest, 'link',
-            title, url
-          ).then(function(mirrorPost) {
-            return mirrorer.byId(mirrorPost.name).then(function(mirror) {
-              mirrors[post.url] = mirror.name;
-              return mirrorer.byId(post.name).then(function(post) {
-                post.mirror_name = mirror.name;
-                return cb.set(mirror.name, mirror).then(function() {
-                  return cb.set(post.name, post).then(function() {
-                    return RSVP.all([
-                      mirrorer.flair(dest, mirror.name, 'meta',
-                        post.subreddit + '|' + post.author
-                      ),
-                      mirrorer.comment(mirror.name,
-                        mirrorCommentTemplate({
-                          post: post,
-                          mirror: mirror
-                        })
-                      )
-                    ]).then(function() {return mirror;});
+          return mirrorer.byId(post.name).then(function(post) {
+            if (post.author === '[deleted]') {
+              post.mirror_name = '[deleted]';
+              return cb.set(post.name, post).then(function() {return null});
+            } else {
+              return mirrorer.submit(dest, 'link',
+                title, url
+              ).then(function(mirrorPost) {
+                return mirrorer.byId(mirrorPost.name).then(function(mirror) {
+                  mirrors[post.url] = mirror.name;
+                  post.mirror_name = mirror.name;
+                  return cb.set(mirror.name, mirror).then(function() {
+                    return cb.set(post.name, post).then(function() {
+                      return RSVP.all([
+                        mirrorer.flair(dest, mirror.name, 'meta',
+                          post.subreddit + '|' + post.author
+                        ),
+                        mirrorer.comment(mirror.name,
+                          mirrorCommentTemplate({
+                            post: post,
+                            mirror: mirror
+                          })
+                        )
+                      ]).then(function() {return mirror;});
+                    });
                   });
                 });
               });
-            });
+            }
           });
         }, function(error) {
           if (error === 'shadowban') {

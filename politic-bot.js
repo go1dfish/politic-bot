@@ -426,18 +426,23 @@ function checkMirrorForRemoval(cb, mirror, interval, post) {
 function reportRemoval(cb, post, dest) {
   var url = "http://www.reddit.com" + post.permalink;
 
-  function flairReport(report) {
-    return reporter.flair(dest, report.name, 'removed',
-      post.subreddit + '|' + post.author
-    ).then(function() {
-      return report;
-    });
-  }
   if (!post.mirror_name || !isValidPost(post) || post.report_name) {
     return Nodewhal.schedule.wait();
   }
 
   return reporter.byId(post.name).then(function(updatedPost) {
+    function flairReport(report) {
+      var flairClass = 'removed';
+      if (updatedPost.link_flair_text) {
+        flairClass='flairedremoval';
+      }
+      return reporter.flair(dest, report.name, flairClass,
+        post.subreddit + '|' + post.author
+      ).then(function() {
+        return report;
+      });
+    }
+
     if (updatedPost.author === '[deleted]') {
       post.report_name = '[deleted]'
       return cb.set(post.name, post);

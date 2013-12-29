@@ -1,6 +1,6 @@
 {
   "name": "politic-bot",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Reddit bots /u/ModerationLog and /u/PoliticBot",
   "main": "politic-bot.js",
   "scripts": {

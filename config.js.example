@@ -1,5 +1,5 @@
 module.exports = {
-  userAgent:        'politic-bot/0.3.5 by go1dfish',
+  userAgent:        'politic-bot/0.3.6 by go1dfish',
   mirrorSubreddit:  'POLITIC',
   reportSubreddit:  'ModerationLog',
   mirrorAccount: {
@@ -53,7 +53,6 @@ module.exports = {
     'Economics',
     'MensRights',
     'WomensRights',
-    'Feminism',
     'PoliticalModeration',
     'ElectionPolls',
     'postnationalist',

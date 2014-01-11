@@ -43,8 +43,8 @@ couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
     pollForRemovals(cb, taskInterval*30);
     // Periodically report removed submissions
     pollForReports(cb, taskInterval);
-    // Poll top 25 posts of mirror subreddit looking at other discussions tab
-    pollMirrorsForRemovals(cb, taskInterval*15, 25);
+    // Poll top 100 posts of mirror subreddit looking at other discussions tab
+    pollMirrorsForRemovals(cb, taskInterval*15, 100);
   });
 }, function(error) {
   console.error('Error connecting to couchbase', error, error.stack);
@@ -477,7 +477,11 @@ function reportRemoval(cb, post, dest) {
                     (mirror.link_flair_text)
                   ),
                   reporter.comment(mirror.name,
-                    '[Removed from /r/'+post.subreddit+'](' + report.url+')'
+                    mirrorRemovalCommentTemplate({
+                      post:   updatedPost,
+                      report: report,
+                      mirror: mirror
+                    })
                   ),
                   reporter.comment(report.name,
                     reportRemovalCommentTemplate({

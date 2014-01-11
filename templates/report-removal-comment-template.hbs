@@ -1,3 +1,7 @@
-[Confirm removal by checking for the submission in Other Discussions tab at /r/POLITIC](/r/{{mirror.subreddit}}/duplicates/{{mirror.id}}/_/)
+{{#if post.link_flair_text}}
+  Flair: [{{post.link_flair_text}}]
+{{else}}
+  [Confirm removal by checking for the submission in Other Discussions tab at /r/POLITIC](/r/{{mirror.subreddit}}/duplicates/{{mirror.id}}/_/)
 
-If this post is present there then the post is not currently removed.
+  If this post is present there then the post is not currently removed.
+{{/if}}

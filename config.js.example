@@ -1,5 +1,5 @@
 module.exports = {
-  userAgent:        'politic-bot/0.3.6 by go1dfish',
+  userAgent:        'politic-bot/0.3.7 by go1dfish',
   mirrorSubreddit:  'POLITIC',
   reportSubreddit:  'ModerationLog',
   mirrorAccount: {
@@ -89,7 +89,8 @@ module.exports = {
     'AnarchistNews',
     'Green_Anarchism',
     'futuristparty',
-    'PirateParty'
+    'PirateParty',
+    'doctorswithoutborders'
   ],
   additionalMirrors: {
   }

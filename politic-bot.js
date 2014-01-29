@@ -31,7 +31,7 @@ couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
   mirrorer.login(
     config.mirrorAccount.user, config.mirrorAccount.password
   ).then(function(mirrorer) {
-    pollForMirrors(cb, taskInterval);
+    //pollForMirrors(cb, taskInterval);
   });
 
   reporter.login(
@@ -234,7 +234,7 @@ function mirrorSubmissions(cb, submissions, interval) {
             return mirror;
           });
         }, function(error) {
-          tempFail[post.name] = post;
+          tempFail[post.name] = '' + error;
           throw error;
         });
       });

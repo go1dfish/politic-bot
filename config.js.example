@@ -90,7 +90,9 @@ module.exports = {
     'Green_Anarchism',
     'futuristparty',
     'PirateParty',
-    'doctorswithoutborders'
+    'doctorswithoutborders',
+    'EndlessWar',
+    'DescentIntoTyranny'
   ],
   additionalMirrors: {
   }

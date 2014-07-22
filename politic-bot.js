@@ -22,10 +22,11 @@ var EventSource = require('eventsource'),
     mirrorRemovalCommentTemplate = Handlebars.compile(
       fs.readFileSync('./templates/mirror-removal-comment-template.hbs') + ''
     ),
-    taskInterval = 2000;
+    taskInterval = 2000,
+    setOpts = {expiry: config.documentTTL};
 
 // Main entry point
-couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
+couchbase.connect({bucket: config.bucket}).then(function(cb) {
   persistIncommingSubmissions(cb, subreddits);
 
   mirrorer.login(
@@ -54,7 +55,7 @@ couchbase.connect({bucket: 'reddit-submissions'}).then(function(cb) {
 // Tasks
 function persistIncommingSubmissions(cb, subreddits) {
   return anonymous.startSubmissionStream(function(submission) {
-    cb.set(submission.name, submission).then(function() {
+    cb.set(submission.name, submission, setOpts).then(function() {
       console.log('new:', 'http://www.reddit.com' + submission.permalink);
       mirrorSubmissions(cb, [submission]);
     }, function(error) {
@@ -136,7 +137,7 @@ function pollRemovalsForSubreddit(cb, subreddit, interval, depth) {
         }
       });
       if (Object.keys(removals).length) {
-        return cb.setMulti(removals).then(function() {
+        return cb.setMulti(removals, setOpts).then(function() {
           return removals;
         });
       }
@@ -215,17 +216,17 @@ function mirrorSubmissions(cb, submissions, interval) {
       }
       if (post.author === '[deleted]') {
         post.mirror_name = '[deleted]';
-        return cb.set(post.name, post).then(function() {return {};});
+        return cb.set(post.name, post, setOpts).then(function() {return {};});
       }
       if (!isValidPost(post)) {
         post.mirror_name = post.name
-        return cb.set(post.name, post)
+        return cb.set(post.name, post, setOpts)
       }
       return anonymous.aboutUser(post.author).then(function(author) {
         var authorAge = post.created_utc - author.created_utc;
         if (authorAge < config.minAuthorAge) {
           post.mirror_name = 'authoryoung';
-          return cb.set(post.name, post).then(function() {return {};});
+          return cb.set(post.name, post, setOpts).then(function() {return {};});
         }
         return mirrorSubmission(
           cb, post, config.mirrorSubreddit
@@ -252,7 +253,7 @@ function mirrorSubmission(cb, postData, dest) {
     }
     if (mirrors[post.url]) {
       post.mirror_name = mirrors[post.url];
-      return cb.set(post.name, post).then(function() {
+      return cb.set(post.name, post, setOpts).then(function() {
         return cb.get(post.mirror_name).then(function(data) {
           return data.value;
         });
@@ -264,8 +265,8 @@ function mirrorSubmission(cb, postData, dest) {
         post.mirror_name = mirrorPost.name;
 
         return mirrorer.byId(mirrorPost.name).then(function(mirror) {
-          return cb.set(mirror.name, mirror).then(function() {
-            return cb.set(post.name, post).then(function() {
+          return cb.set(mirror.name, mirror, setOpts).then(function() {
+            return cb.set(post.name, post, setOpts).then(function() {
               mirrors[post.url] = mirror.name;
               return mirror;
             });
@@ -284,7 +285,7 @@ function mirrorSubmission(cb, postData, dest) {
           return mirrorer.byId(post.name).then(function(post) {
             if (post.author === '[deleted]') {
               post.mirror_name = '[deleted]';
-              return cb.set(post.name, post).then(function() {return null});
+              return cb.set(post.name, post, setOpts).then(function() {return null});
             } else {
               return mirrorer.submit(dest, 'link',
                 title, url
@@ -292,8 +293,8 @@ function mirrorSubmission(cb, postData, dest) {
                 return mirrorer.byId(mirrorPost.name).then(function(mirror) {
                   mirrors[post.url] = mirror.name;
                   post.mirror_name = mirror.name;
-                  return cb.set(mirror.name, mirror).then(function() {
-                    return cb.set(post.name, post).then(function() {
+                  return cb.set(mirror.name, mirror, setOpts).then(function() {
+                    return cb.set(post.name, post, setOpts).then(function() {
                       return RSVP.all([
                         mirrorer.flair(dest, mirror.name, 'meta',
                           post.subreddit + '|' + post.author
@@ -315,7 +316,7 @@ function mirrorSubmission(cb, postData, dest) {
           if (error === 'shadowban') {
             console.log(post.author, error);
             post.mirror_name = 'shadowbanned';
-            cb.set(post.name, post);
+            cb.set(post.name, post, setOpts);
           } else {
             console.error(post.author, error, error.stack);
           }
@@ -445,14 +446,14 @@ function reportRemoval(cb, post, dest) {
 
     if (updatedPost.author === '[deleted]') {
       post.report_name = '[deleted]'
-      return cb.set(post.name, post);
+      return cb.set(post.name, post, setOpts);
     }
     try {
       if (  updatedPost.domain === ('self.' + post.subreddit)
             && updatedPost.selftext_html.indexOf('[removed]') === -1
       ) {
         post.disappeared = null;
-        return cb.set(post.name, post).then(function() {return {}});
+        return cb.set(post.name, post, setOpts).then(function() {return {}});
       }
     } catch(e) {console.error(e.stack)}
     return reporter.checkForShadowban(post.author).then(function() {
@@ -460,8 +461,8 @@ function reportRemoval(cb, post, dest) {
         if (typeof submitted === 'object') {
           var report = submitted[0].data.children[0].data;
           post.report_name = report.name;
-          cb.set(report.name, report);
-          return cb.set(post.name, post).then(function() {
+          cb.set(report.name, report, setOpts);
+          return cb.set(post.name, post, setOpts).then(function() {
             return report;
           });
         } else {
@@ -469,8 +470,8 @@ function reportRemoval(cb, post, dest) {
             entities.decode(post.title), url
           ).then(function(report) {
             post.report_name = report.name;
-            cb.set(report.name, report);
-            return cb.set(post.name, post).then(function() {
+            cb.set(report.name, report, setOpts);
+            return cb.set(post.name, post, setOpts).then(function() {
               return mirrorer.byId(post.mirror_name).then(function(mirror) {
                 return RSVP.all([
                   mirrorer.flair(mirror.subreddit, mirror.name, 'removed',
@@ -499,7 +500,7 @@ function reportRemoval(cb, post, dest) {
         if (error === 'shadowban') {
           console.log(post.author, error);
           post.report_name = 'shadowbanned';
-          return cb.set(post.name, post);
+          return cb.set(post.name, post, setOpts);
         } else {
           console.error(error, error.stack);
         }

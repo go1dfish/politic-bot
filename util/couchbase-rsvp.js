@@ -4,9 +4,9 @@ var couchbase   = require('couchbase'),
 function CouchRSVP(cb) {
   var self = this;
 
-  this.set = function(key, value) {
+  this.set = function(key, value, opts) {
     return new RSVP.Promise(function(resolve, reject) {
-      cb.set(key, value, function(error) {
+      cb.set(key, value, opts, function(error) {
         if (error) {
           reject(error);
         } else {
@@ -16,9 +16,9 @@ function CouchRSVP(cb) {
     });
   };
 
-  this.setMulti = function(values) {
+  this.setMulti = function(values, opts) {
     return RSVP.all(Object.keys(values).map(function(key) {
-      return self.set(key, values[key]);
+      return self.set(key, values[key], opts);
     })).then(function() {return values});
   };
 

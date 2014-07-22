@@ -1,5 +1,7 @@
 module.exports = {
-  userAgent:        'politic-bot/0.3.7 by go1dfish',
+  bucket:           'default',
+  documentTTL:      60*60*24*5,
+  userAgent:        'politic-bot/0.3.8 by go1dfish',
   mirrorSubreddit:  'POLITIC',
   reportSubreddit:  'ModerationLog',
   mirrorAccount: {
@@ -92,7 +94,9 @@ module.exports = {
     'PirateParty',
     'doctorswithoutborders',
     'EndlessWar',
-    'DescentIntoTyranny'
+    'DescentIntoTyranny',
+    'european',
+    'LegalNews'
   ],
   additionalMirrors: {
   }

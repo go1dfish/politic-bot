@@ -1,17 +1,9 @@
 module.exports = {
-  bucket:           'default',
-  documentTTL:      60*60*24*5,
-  userAgent:        'politic-bot/0.3.8 by go1dfish',
+  userAgent:        'politic-bot/0.4.0 by go1dfish',
   mirrorSubreddit:  'POLITIC',
   reportSubreddit:  'ModerationLog',
-  mirrorAccount: {
-    user:     'yourusername',
-    password: 'yourpassword'
-  },
-  reportAccount: {
-    user:     'yourusername',
-    password: 'yourpassword'
-  },
+  user:     'yourusername',
+  password: 'yourpassword',
   minAuthorAge: 60*60*1000,
   filterDomains: [
     'facebook.com',
@@ -97,7 +89,5 @@ module.exports = {
     'DescentIntoTyranny',
     'european',
     'LegalNews'
-  ],
-  additionalMirrors: {
-  }
+  ]
 };

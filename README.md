@@ -8,12 +8,12 @@ Used to power [/r/POLITIC](http://reddit.com/r/POLITIC) and [/r/ModerationLog](h
 
  * A reddit account capable of posting/commenting without captchas
  * Two subreddits the account has mod priviledges for
-  * Both subreddits should have link flair enabled
-  * A mirror subreddit like /r/POLITIC
-   * 'meta' and 'removed' link flair templates
-   * AutoModerator is recommended to approve all posts from bot.
-  * A report subreddit like /r/ModerationLog
-   * 'removed' and 'flairedremoval' link flair templates
+   * Both subreddits should have link flair enabled
+   * A mirror subreddit like /r/POLITIC
+     * 'meta' and 'removed' link flair templates
+     * AutoModerator is recommended to approve all posts from bot.
+   * A report subreddit like /r/ModerationLog
+     * 'removed' and 'flairedremoval' link flair templates
  * node/npm
 
 

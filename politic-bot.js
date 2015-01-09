@@ -19,7 +19,7 @@ if (config.streamUrl) {anon.streamUrl = config.streamUrl;} else {
 }
 
 bot.login(config.user, config.password).then(function() {
-  return RSVP.all([mirrorIncommingSubmissions(), pollMirrorsForRemovals()]);
+  return RSVP.all([mirrorIncommingSubmissions(), pollMirrorsForRemovals(25), pollMirrorsForRemovals(100), pollMirrorsForRemovals(1000)]);
 }).then(undefined, function(error) {console.error("Err", error);});
 
 function mirrorIncommingSubmissions() {
@@ -44,15 +44,19 @@ function mirrorIncommingSubmissions() {
           post: post, mirror: mirror
         })).then(function() {return checkForRemovals(mirror);});
       });
-    }).then(undefined, function(error) {console.error('Mirroring error', error.stack || error);});
+    }).then(undefined, function(error) {
+      if (error === 'usermissing') {return;} else {
+        console.error('Mirroring error', error.stack || error);
+      }
+    });
   }, config.subreddits);
 }
 
 function pollMirrorsForRemovals(depth, interval) {
-  depth = depth || 1000; interval = interval || 500;
+  depth = depth || 500; interval = interval || 5000;
   return Nodewhal.schedule.repeat(function() {
     return anon.listing('/r/'+config.mirrorSubreddit, {max: depth, wait: interval}).then(function(mirrored) {
-      mirrored = Object.keys(mirrored).map(function(key) {return mirrored[key];});
+      mirrored = _.shuffle(Object.keys(mirrored).map(function(key) {return mirrored[key];}));
       return Nodewhal.schedule.runInSeries(mirrored.map(function(mirror) {
         return function() {return checkForRemovals(mirror, interval);};
       }), interval);
@@ -88,7 +92,7 @@ function checkForRemovals(mirror, interval) {
         return function() {
           return bot.byId(id).then(function(post) {
             if (post.author === '[deleted]') {return;}
-            if (post.is_self && (post.selftext || !post.selftext_html.match('removed'))) {return;}
+            if (post.is_self && (post.selftext || !post.selftext_html || !post.selftext_html.match('removed'))) {return;}
             return reportRemoval(post, mirror);
           });
         };
@@ -106,19 +110,22 @@ function reportRemoval(post, mirror) {
       } else {
         return bot.submit(config.reportSubreddit, 'link',
           entities.decode(post.title), url
-        ).then(function(report) {return bot.byId(report.name);});
+        ).then(function(report) {return bot.byId(report.name);}).then(function(report) {
+          return RSVP.all([
+            bot.comment(mirror.name, templates.mirrorRemoval({post:post, report:report, mirror:mirror})),
+            bot.comment(report.name, templates.reportRemoval({post:post, report:report, mirror:mirror}))
+          ]);
+        });
       }
     }).then(function(report) {
-      return RSVP.all([
-        bot.flair(mirror.subreddit, mirror.name, 'removed', mirror.link_flair_text),
-        bot.comment(mirror.name, templates.mirrorRemoval({post:post, report:report, mirror:mirror})),
-        bot.comment(report.name, templates.reportRemoval({post:post, report:report, mirror:mirror}))
-      ]).then(function() {return report;});
-    }).then(function(report) {
       var flairClass = 'removed'; if (post.link_flair_text) {flairClass = 'flairedremoval';}
-      return bot.flair(
-        config.reportSubreddit, report.name, flairClass, post.subreddit+'|'+post.author
-      ).then(function() {return report;});
+      return RSVP.all([
+        bot.flair(config.reportSubreddit, report.name, flairClass, post.subreddit+'|'+post.author),
+        bot.flair(mirror.subreddit, mirror.name, 'removed', mirror.link_flair_text)
+      ]).then(function() {return report;});
     });
-  }).then(undefined, function(error) {console.error("Reporting error", error.stack || error);});
+  }).then(undefined, function(error) {
+    if ((error+'').match(/shadowban/)) {return;}
+    console.error("Reporting error", error.stack || error);
+  });
 }

@@ -11,7 +11,7 @@
     "eventsource": "0.0.10",
     "reddit-stream": "git://github.com/go1dfish/reddit-stream.git#master",
     "nodewhal": "git://github.com/go1dfish/nodewhal.git#master",
-    "rsvp": "2.0.4",
+    "rsvp": "3.0.16",
     "request": "2.27.0",
     "html-entities": "1.0.10",
     "handlebars": "1.1.2",

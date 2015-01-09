@@ -22,34 +22,47 @@ bot.login(config.user, config.password).then(function() {
   return RSVP.all([mirrorIncommingSubmissions(), pollMirrorsForRemovals(25), pollMirrorsForRemovals(100), pollMirrorsForRemovals(1000)]);
 }).then(undefined, function(error) {console.error("Err", error);});
 
+
+var submissionQueue = [];
+
+
 function mirrorIncommingSubmissions() {
-  return anon.startSubmissionStream(function(post) {
-    if (post.author === '[deleted]') {return;}
-    return anon.aboutUser(post.author).then(function(author) {
-      var authorAge = post.created_utc - author.created_utc;
-      if (authorAge < config.minAuthorAge) {return;}
-      return bot.submitted(config.mirrorSubreddit, post.url).then(function(submitted) {
-        if (typeof submitted === 'object') {// Already mirrored/posted
-          return bot.byId(submitted[0].data.children[0].data.name);
-        } else {
-          return bot.submit(config.mirrorSubreddit, 'link',
-            entities.decode(post.title), entities.decode(post.url)
-          ).then(function(mirror) {
-            return bot.flair(config.mirrorSubreddit, mirror.name, 'meta',
-                post.subreddit + '|' + post.author).then(function() {return bot.byId(mirror.name);});
+  return RSVP.all([
+    anon.startSubmissionStream(function(post) {
+      submissionQueue.splice(0, 0, post);
+    }, config.subreddits),
+    Nodewhal.schedule.repeat(function() {
+      var post = submissionQueue.pop();
+      if (post && post.author !== '[deleted]') {
+        return anon.aboutUser(post.author).then(function(author) {
+          var authorAge = post.created_utc - author.created_utc;
+          if (authorAge < config.minAuthorAge) {return;}
+          return bot.submitted(config.mirrorSubreddit, post.url).then(function(submitted) {
+            if (typeof submitted === 'object') {// Already mirrored/posted
+              return bot.byId(submitted[0].data.children[0].data.name);
+            } else {
+              return bot.submit(config.mirrorSubreddit, 'link',
+                entities.decode(post.title), entities.decode(post.url)
+              ).then(function(mirror) {
+                return bot.flair(config.mirrorSubreddit, mirror.name, 'meta',
+                    post.subreddit + '|' + post.author).then(function() {return bot.byId(mirror.name);});
+              });
+            }
+          }).then(function(mirror) {
+            return bot.comment(mirror.name, templates.mirror({
+              post: post, mirror: mirror
+            })).then(function() {return checkForRemovals(mirror);});
           });
-        }
-      }).then(function(mirror) {
-        return bot.comment(mirror.name, templates.mirror({
-          post: post, mirror: mirror
-        })).then(function() {return checkForRemovals(mirror);});
-      });
-    }).then(undefined, function(error) {
-      if (error === 'usermissing') {return;} else {
-        console.error('Mirroring error', error.stack || error);
+        }).then(undefined, function(error) {
+          if (error === 'usermissing') {return;} else {
+            console.error('Mirroring error', error.stack || error);
+          }
+        });
+      } else {
+        return RSVP.resolve(null);
       }
-    });
-  }, config.subreddits);
+    }, 1000)
+  ]);
 }
 
 function pollMirrorsForRemovals(depth, interval) {
@@ -114,13 +127,13 @@ function reportRemoval(post, mirror) {
           return RSVP.all([
             bot.comment(mirror.name, templates.mirrorRemoval({post:post, report:report, mirror:mirror})),
             bot.comment(report.name, templates.reportRemoval({post:post, report:report, mirror:mirror}))
-          ]);
+          ]).then(function() {return report;});
         });
       }
     }).then(function(report) {
       var flairClass = 'removed'; if (post.link_flair_text) {flairClass = 'flairedremoval';}
       return RSVP.all([
-        bot.flair(config.reportSubreddit, report.name, flairClass, post.subreddit+'|'+post.author),
+        bot.flair(report.subreddit, report.name, flairClass, post.subreddit+'|'+post.author),
         bot.flair(mirror.subreddit, mirror.name, 'removed', mirror.link_flair_text)
       ]).then(function() {return report;});
     });

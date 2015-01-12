@@ -7,6 +7,7 @@ Used to power [/r/POLITIC](http://reddit.com/r/POLITIC) and [/r/ModerationLog](h
 ## Requirements
 
  * A reddit account capable of posting/commenting without captchas
+   * A multi-reddit named "monitored" that contains the subs to be mirrored/monitored for removals
  * Two subreddits the account has mod priviledges for
    * Both subreddits should have link flair enabled
    * A mirror subreddit like /r/POLITIC
@@ -15,7 +16,6 @@ Used to power [/r/POLITIC](http://reddit.com/r/POLITIC) and [/r/ModerationLog](h
    * A report subreddit like /r/ModerationLog
      * 'removed' and 'flairedremoval' link flair templates
  * node/npm
-
 
 ## Instructions
 

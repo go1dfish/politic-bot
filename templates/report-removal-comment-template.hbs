@@ -1,7 +1,9 @@
-Originaly posted by: {{post.author}} to /r/{{post.subreddit}}
+[Removed from /r/{{post.subreddit}}]({{report.url}}) {{#if post.link_flair_text}}[{{post.link_flair_text}}]{{/if}}
 
-{{#if post.link_flair_text}}
-  Flaired at removal: [{{post.link_flair_text}}]
+{{#if modComment}}
+  # --- Begin /r/{{post.subreddit}} Moderator Comment ---
+
+  {{modComment.body}}
+
+  # --- End /r/{{post.subreddit}} Moderator Comment ---
 {{/if}}
-
-**This bot is not affiliated with the moderators of /r/{{post.subreddit}}  it did NOT remove this post, it only detected that it went missing**

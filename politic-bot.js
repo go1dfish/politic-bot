@@ -10,6 +10,7 @@ var anon = Nodewhal(config.userAgent);
 var handledMentions = {};
 var submissionQueue = [];
 var removalCheckQueue = {};
+var knownPostNames = {};
 var templates = {
   mirror: Handlebars.compile(fs.readFileSync('./templates/mirror-comment-template.hbs')+''),
   reportRemoval: Handlebars.compile(fs.readFileSync('./templates/report-removal-comment-template.hbs')+''),
@@ -24,6 +25,7 @@ if (config.streamUrl) {anon.streamUrl = config.streamUrl;} else {
 bot.login(config.user, config.password).then(function() {
   return RSVP.all([
     trackIncommingSubmissions(),
+    trackIncommingSubmissions(60*1000),
     Nodewhal.schedule.repeat(function() {
       submissionQueue = _.shuffle(submissionQueue);
       if (submissionQueue.length) {
@@ -33,7 +35,7 @@ bot.login(config.user, config.password).then(function() {
         if (!name) {return RSVP.resolve();}
         return checkForRemovals(removalCheckQueue[name]);   
       } else {
-        return anon.listing('/r/'+config.mirrorSubreddit, {max: 100}).then(function(mirrored) {
+        return anon.listing('/r/'+config.mirrorSubreddit, {max: 1000}).then(function(mirrored) {
           mirrored = _.shuffle(Object.keys(mirrored).map(function(key) {return mirrored[key];}));
           mirrored.forEach(function(mirror) {removalCheckQueue[mirror.name] = mirror;});
         }).then(checkMentions);
@@ -42,20 +44,38 @@ bot.login(config.user, config.password).then(function() {
   ]);
 }).then(undefined, function(error) {console.error("Err", error);});
 
-function trackIncommingSubmissions() {
-  bot.get(bot.baseUrl + '/api/multi/mine').then(function(data) {
-    return data.map(function(i) {return i.data;}).filter(function(item) {
-      return item.name === 'monitored';
-    })[0].subreddits.map(function(sub) {return sub.name;});
-  }).then(function(subreddits) {
-    return RSVP.all([
-      anon.startSubmissionStream(function(post) {
-        return bot.byId(post.name).then(function(newPost) {
-          return submissionQueue.push(newPost);
+function trackIncommingSubmissions(interval) {
+  if (interval) {
+    return Nodewhal.schedule.repeat(function() {
+      return bot.listing('/me/m/monitored/new', {max:25}).then(function(monitoredPosts) {
+        Object.keys(monitoredPosts).map(function(j) {return monitoredPosts[j];}).filter(function(post) {
+          return !knownPostNames[post.name];
+        }).forEach(function(post) {
+          knownPostNames[post.name] = true;
+          if (!submissionQueue.filter(function(s) {return s.name === post.name;}).length) {
+            submissionQueue.push(post);
+          }
         });
-      }, subreddits),
-    ]);
-  });
+      }); 
+    }, interval);
+  } else {
+    return bot.get(bot.baseUrl + '/api/multi/mine').then(function(data) {
+      return data.map(function(i) {return i.data;}).filter(function(item) {
+        return item.name === 'monitored';
+      })[0].subreddits.map(function(sub) {return sub.name;});
+    }).then(function(subreddits) {
+      return RSVP.all([
+        anon.startSubmissionStream(function(post) {
+          if (!knownPostNames[post.name]) {
+            knownPostNames[post.name] = true;
+            if (!submissionQueue.filter(function(s) {return s.name === post.name;}).length) {
+              return submissionQueue.push(post);
+            }
+          }
+        }, subreddits),
+      ]);
+    });
+  }
 }
 
 function mirrorSubmission(post) {
@@ -77,7 +97,7 @@ function mirrorSubmission(post) {
       }).then(function(mirror) {
         return bot.comment(mirror.name, templates.mirror({
           post: post, mirror: mirror
-        })).then(function() {removalCheckQueue[mirror.name] = mirror;});
+        })).then(function() {return checkForRemovals(mirror);});
       });
     }).then(undefined, function(error) {
       if (error === 'usermissing') {return;} else {
@@ -123,6 +143,7 @@ function checkForRemovals(mirror) {
       var removed = knownPosts.filter(function(post) {return dupes.indexOf(post)===-1;});
       if (missing.length) {
         return RSVP.all(missing.map(function(post) {
+          knownPostNames[post.name] = true;
           return bot.comment(mirror.name, templates.mirror({post: post, mirror: mirror}));
         })).then(function() {return removed;});
       }

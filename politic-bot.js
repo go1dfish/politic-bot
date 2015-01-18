@@ -2,14 +2,13 @@ var RSVP = require('rsvp'), fs = require('fs'), Handlebars = require('handlebars
 var _ = require('underscore'), config = require('./config'), pkg = require('./package');
 var mirrorSub = config.mirrorSubreddit.toLowerCase(), reportSub = config.reportSubreddit.toLowerCase();
 var subreddits = [], botSubs = [mirrorSub, reportSub], schedule = Nodewhal.schedule; 
-var blacklist = ['suicidewatch', 'depression', 'civcraft'];
 config.userAgent = pkg.name+'/'+pkg.version+' by '+pkg.author;
 
 require('./main')(config, {
   mirror: Handlebars.compile(fs.readFileSync('./templates/mirror.md.hbs')+''),
   report: Handlebars.compile(fs.readFileSync('./templates/report.md.hbs')+''),
 }, function(bot, mirror) {
-  var blacklist = ['suicidewatch', 'depression', 'civcraft'], handled = {};
+  var handled = {};
   function getPost(url) {return bot.byId('t3_' + url.split('/comments/').pop().split('/')[0]);}
   if (config.streamUrl) {bot.streamUrl = config.streamUrl;} else {require('reddit-stream');
     bot.streamUrl = "http://localhost:4243/submission_stream?eventsource=true";
@@ -35,8 +34,8 @@ require('./main')(config, {
     }).then(function(subs) {subreddits = subs;});
   }, 5*60*1000), bot.startSubmissionStream(function(post) {
     var postSub = post.subreddit.toLowerCase(), postTitle = post.title.toLowerCase(), postSelf = post.selftext;
+    var blacklist = (config.blacklist || []).map(function(j) {return j.toLowerCase();});
     if (postSelf) {postSelf = postSelf.toLowerCase();}
-    blacklist = blacklist.map(function(j) {return j.toLowerCase();});
     if (_.contains(blacklist.concat(botSubs), postSub)) {return;}
     if (_.contains(subreddits, post.subreddit.toLowerCase()) || bot.knownUrls[post.url]) {
       mirror(post);

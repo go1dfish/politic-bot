@@ -3,6 +3,5 @@
   "password":         "yourpassword",
   "mirrorSubreddit":  "POLITIC",
   "reportSubreddit":  "ModerationLog",
-  "minAuthorAge":     3600000,
-  "blacklist":        ["suicidewatch", "depression", "civcraft"]
+  "minAuthorAge":     3600000
 }

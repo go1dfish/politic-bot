@@ -44,7 +44,13 @@ require('./main')(config, {
     ]); 
   }, 60*1000), schedule.repeat(function() {
     return bot.get(bot.baseUrl + '/api/multi/mine').then(function(data) {
-      return data.map(function(i) {return i.data.subreddits;});
+      return data.map(function(i) {
+        if (i.data.name.toLowerCase() === 'blacklist') {
+          config.blacklist = i.data.subreddits.map(function(j) {return j.name;});   
+          return [];
+        }
+        return i.data.subreddits;
+      });
     }).then(function(multis) {
       return _.union.apply(_, multis).map(function(sub) {return sub.name.toLowerCase();});
     }).then(function(subs) {subreddits = subs;});

@@ -176,7 +176,7 @@ function update(mirror, knownPost) {delete(updateQueue[mirror.name]);
           })
         ]).then(function() {return templates.mirror(postData);}).then(function(body) {
           if (!botComment) {return bot.comment(mirror.name, body);}
-          else if (body !== botComment.body) {return bot.editusertext(botComment.name, body);}
+          else if (body.trim() !== botComment.body.trim()) {return bot.editusertext(botComment.name, body);}
         });
       });
     });

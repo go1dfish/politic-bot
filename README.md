@@ -7,7 +7,7 @@ Used to power [/r/POLITIC](http://reddit.com/r/POLITIC) and [/r/ModerationLog](h
 ## Requirements
 
  * A reddit account capable of posting/commenting without captchas
-   * A multi-reddit named "monitored" that contains the subs to be mirrored/monitored for removals
+   * (optional) All multi-reddits on the account are used to find topical posts
  * Two subreddits the account has mod priviledges for
    * Both subreddits should have link flair enabled
    * A mirror subreddit like /r/POLITIC

@@ -3,19 +3,34 @@ var _ = require('underscore'), config = require('./config'), pkg = require('./pa
 var mirrorSub = config.mirrorSubreddit.toLowerCase(), reportSub = config.reportSubreddit.toLowerCase();
 var subreddits = [], botSubs = [mirrorSub, reportSub], schedule = Nodewhal.schedule; 
 config.userAgent = pkg.name+'/'+pkg.version+' by '+pkg.author;
+botSubs = botSubs.map(function(j) {return j.toLowerCase();});
 
 require('./main')(config, {
   mirror: Handlebars.compile(fs.readFileSync('./templates/mirror.md.hbs')+''),
   report: Handlebars.compile(fs.readFileSync('./templates/report.md.hbs')+''),
-}, function(bot, mirror) {
-  var handled = {};
+}, function(bot, mirrorFunc) {
+  var handled = {}, linkMap = {};
   function getPost(url) {return bot.byId('t3_' + url.split('/comments/').pop().split('/')[0]);}
+  function mirror(post) {
+    var linkNames = linkMap[post.url] = linkMap[post.url] || [];
+    linkMap[post.url] = linkNames = linkNames.filter(function(j) {return j.name !== post.name;});
+    if (linkNames.length) {
+      RSVP.all(linkNames.map(bot.byId)).then(function(posts) {
+        return RSVP.all(posts.map(function(post) {
+          linkMap[post.url] = linkNames = _.without(linkNames, post.name);
+          return mirrorFunc(post);
+        })); 
+      }).catch(function(err) {console.error(err.stack || err);});
+    }
+    return mirrorFunc(post);
+  }
   if (config.streamUrl) {bot.streamUrl = config.streamUrl;} else {require('reddit-stream');
     bot.streamUrl = "http://localhost:4243/submission_stream?eventsource=true";
   }
   return RSVP.all([schedule.repeat(function() {var handled = {};
+    if (!subreddits.length) {return RSVP.resolve();}
     return RSVP.all([
-      bot.listing('/me/m/monitored/new', {max:25}).then(function(posts) {
+      bot.listing('/r/'+subreddits.join('+'), {max:25}).then(function(posts) {
         Object.keys(posts).map(function(j) {return posts[j];}).forEach(mirror);
       }), bot.mentions().then(function(mentions) {
         var posts = mentions.filter(function(mention) {
@@ -29,8 +44,9 @@ require('./main')(config, {
     ]); 
   }, 60*1000), schedule.repeat(function() {
     return bot.get(bot.baseUrl + '/api/multi/mine').then(function(data) {
-      return data.map(function(i) {return i.data;}).filter(function(item) {return item.name === 'monitored';
-      })[0].subreddits.map(function(sub) {return sub.name.toLowerCase();});
+      return data.map(function(i) {return i.data.subreddits;});
+    }).then(function(multis) {
+      return _.union.apply(_, multis).map(function(sub) {return sub.name.toLowerCase();});
     }).then(function(subs) {subreddits = subs;});
   }, 5*60*1000), bot.startSubmissionStream(function(post) {
     var postSub = post.subreddit.toLowerCase(), postTitle = post.title.toLowerCase(), postSelf = post.selftext;
@@ -50,5 +66,8 @@ require('./main')(config, {
     else if (postSelf && subreddits.filter(function(j) {return postSelf.match('/r/'+j);}).length) {mirror(post);} 
     else if (postSelf && botSubs.filter(function(j) {return postSelf.match('r/'+j);}).length) {mirror(post);}
     else if (postSelf && postSelf.match(bot.user.toLowerCase())) {mirror(post);}
+    else if (!_.contains(botSubs, postSub)) {var linkNames = linkMap[post.url] = linkMap[post.url] || [];
+      if (!_.contains(linkNames, post.name)) {linkNames.push(post.name);}
+    }
   })]);
 });

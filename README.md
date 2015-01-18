@@ -21,7 +21,10 @@ Used to power [/r/POLITIC](http://reddit.com/r/POLITIC) and [/r/ModerationLog](h
 
     git clone https://github.com/go1dfish/politic-bot.git
     cd politic-bot
-    cp config.js.example config.js
-    edit config.js // Configure your account/subreddits
-    npm install
+    cp config.json.example config.json
+    edit config.json // Configure your account/subreddits
+    npm install && npm install -g forever
     npm start
+    cat out.log
+    cat err.log
+    npm stop

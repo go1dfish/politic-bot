@@ -1,8 +1,0 @@
-module.exports = {
-  userAgent:        'politic-bot/0.4.2 by go1dfish',
-  mirrorSubreddit:  'POLITIC',
-  reportSubreddit:  'ModerationLog',
-  user:     'yourusername',
-  password: 'yourpassword',
-  minAuthorAge: 60*60*1000
-};

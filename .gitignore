@@ -1,6 +1,7 @@
 node_modules
 npm-debug.log
-config.js
-output.txt
+config.json
+err.log
+out.log
 *.swp
 *.swo

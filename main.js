@@ -128,28 +128,32 @@ function update(mirror, knownPost) {delete(updateQueue[mirror.name]);
   return bot.comments(mirror.permalink).then(function(comments) {
     return comments.map(function(j) {return j.data;}).filter(function(j) {return j.author===bot.user;})[0];
   }).then(function(botComment) {
-    var removed = [], knownPosts = [];
+    var removed = [], knownPosts = [], missing = [];
+    var blacklist = (bot.config.blacklist || []).concat([reportSub, mirrorSub]);
+    blacklist = blacklist.map(function(j) {return j.toLowerCase();});
     if (botComment) {
-      knownPosts = _.union(knownPosts, getLinks(botComment.body, /(?:^ \* \[\/r\/.*\]\()(.*)(?:\))/mg));
       removed = getLinks(botComment.body, /(?:^ \* ~~\[\/r\/.*\]\()(.*)(?:\)~~)/mg);
+      knownPosts = _.union(removed, getLinks(botComment.body, /(?:^ \* \[\/r\/.*\]\()(.*)(?:\))/mg));
     }
     if (knownPost) {
-      missing.push(knownPost);
-      if (!_.contains(knownPosts, knownPost.permalink)) {knownPosts.push(knownPost.permalink);}
+      var knownPostPermalink = normUrl(knownPost.permalink);
+      postMap[knownPostPermalink] = knownPost;
+      if (!_.contains(knownPosts, knownPostPermalink)) {knownPosts.push(knownPostPermalink);}
     }
-    return bot.duplicates(mirrorSub, mirror.name).then(function(duplicates) {var dupes = [];
-      duplicates.forEach(function(listing) {
-        if (!listing || !listing.data || !listing.data.children) {return;}
-        listing.data.children.map(function(j) {return j.data;}).filter(function(child) {
+    return bot.duplicates(mirrorSub, mirror.name).then(function(duplicates) {
+      return _.union.apply(_, duplicates.map(function(listing) {
+        if (!listing || !listing.data || !listing.data.children) {return [];}
+        return listing.data.children.map(function(j) {return j.data;}).filter(function(child) {
           knownPostNames[child.name] = true;
           postMap[normUrl(child.permalink)] = child; 
-          return (child.subreddit !== reportSub) && (child.subreddit !== mirrorSub);
-        }).forEach(function(child) {var permalink = normUrl(child.permalink);
-          if (!_.contains(dupes, permalink)) {dupes.push(permalink);}
-          if (!_.contains(knownPosts, permalink) && !_.contains(missing, child)) {missing.push(child);}
-        });
-      });
-      return _.difference(knownPosts, dupes);
+          return (!_.contains([reportSub.toLowerCase(), mirrorSub.toLowerCase()], child.subreddit.toLowerCase()));
+        }).map(function(child) {return child.permalink;}).map(normUrl);
+      }));
+    }).then(function(duplicates) {
+      missing = _.union(duplicates, removed);
+      missing = _.union(missing, _.difference(duplicates, knownPosts));
+      knownPosts = _.union(knownPosts, duplicates);
+      return _.difference(_.difference(knownPosts, duplicates), removed);
     }).then(function(detectedRemovals) {
       return RSVP.all(detectedRemovals.map(getPost)).then(function(posts) {
         return posts.filter(function(post) {
@@ -161,10 +165,9 @@ function update(mirror, knownPost) {delete(updateQueue[mirror.name]);
         }).map(function(post) {return normUrl(post.permalink);});
       });
     }).then(function(detectedRemovals) {var postData = {};
-      if (!(missing.length || detectedRemovals.length)) {return;}
-      missing = missing.map(function(j) {return j.permalink;}).map(normUrl);
-      removed = _.union(removed, detectedRemovals);
-      knownPosts = _.difference(_.union(knownPosts, missing), removed);
+      if (!(missing.length || !detectedRemovals.length)) {return;}
+      removed = _.union(removed, detectedRemovals); 
+      knownPosts = _.difference(knownPosts, removed);
       return RSVP.all(detectedRemovals.map(getPost)).then(function(posts) {
         posts.forEach(function(post) {reportQueue[post.name] = {post: post, mirror: mirror};});
       }).then(function() {

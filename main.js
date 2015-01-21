@@ -67,7 +67,7 @@ function mirrorPost(post) {
   if (post && post.author !== '[deleted]') {
     return bot.aboutUser(post.author).then(function(author) {
       if ((post.created_utc - author.created_utc) < minAuthorAge) {return;}
-      bot.knownUrls[post.url] = true;
+      if (!post.is_self) {bot.knownUrls[post.url] = true;}
       return bot.submitted(mirrorSub, entities.decode(post.url)).then(function(submitted) {
         if (typeof submitted === 'object') {return bot.byId(submitted[0].data.children[0].data.name);}
         return bot.submit(mirrorSub, 'link',

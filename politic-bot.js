@@ -59,7 +59,7 @@ require('./main')(config, {
     var blacklist = (config.blacklist || []).map(function(j) {return j.toLowerCase();});
     if (postSelf) {postSelf = postSelf.toLowerCase();}
     if (_.contains(blacklist.concat(botSubs), postSub)) {return;}
-    if (_.contains(subreddits, post.subreddit.toLowerCase()) || bot.knownUrls[post.url]) {
+    if (_.contains(subreddits, post.subreddit.toLowerCase()) || (!post.is_self && post.url && bot.knownUrls[post.url])) {
       mirror(post);
     } else if (subreddits.filter(function(sub) {return postTitle.indexOf('r/'+sub) !== -1;}).length) {
       mirror(post);

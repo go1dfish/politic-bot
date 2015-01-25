@@ -11,7 +11,7 @@ if (!trackNewPosts) {trackNewPosts = function() {return RSVP.resolve();};}
 return bot.login(cfg.user, cfg.password).then(function() {return fetchMirrors(1000, true);}).then(function() {
   return fetchMirrors(10).then(function() {return RSVP.all([
     trackNewPosts(bot, newPost), mainLoop(), mainLoop(), 
-    schedule.wait(4*60*60*1000).then(function() {return schedule.repeat(fetchMirrors, 4*60*60*1000);})
+    schedule.wait(24*60*60*1000).then(function() {return schedule.repeat(fetchMirrors, 24*60*60*1000);})
   ]);});
 }).catch(function(error) {console.error("Err", error);});
 
@@ -40,14 +40,16 @@ function fetchMirrors(count, avoidUpdate) {
   return RSVP.all(['/r/' + mirrorSub, '/r/' + mirrorSub + '/new'].map(function(path) {
     return bot.listing(path, {max: count || 1000}).then(function(posts) {
       Object.keys(posts).forEach(function(key) {
-        bot.knownUrls[posts[key].url] = true;
+        var post = posts[key];
+        if (!post.is_self && post.url) {bot.knownUrls[posts.url] = true;}
         if (!avoidUpdate) {updateQueue[posts[key].name] = posts[key];}
       });
     });
   })).then(function(sets) {return _.union.apply(_,sets);});
 }
 
-function newPost(post) {bot.knownUrls[post.url] = true;
+function newPost(post) {
+  if (!post.is_self && post.url) {bot.knownUrls[post.url] = true;}
   if (!knownPostNames[post.name]) {knownPostNames[post.name] = true;
     if (submissionQueue.filter(function(s) {return s.name === post.name;}).length) {return;}
     submissionQueue.splice(0, 0, post);
@@ -67,7 +69,7 @@ function mirrorPost(post) {
   if (post && post.author !== '[deleted]') {
     return bot.aboutUser(post.author).then(function(author) {
       if ((post.created_utc - author.created_utc) < minAuthorAge) {return;}
-      if (!post.is_self) {bot.knownUrls[post.url] = true;}
+      if (!post.is_self && post.url) {bot.knownUrls[post.url] = true;}
       return bot.submitted(mirrorSub, entities.decode(post.url)).then(function(submitted) {
         if (typeof submitted === 'object') {return bot.byId(submitted[0].data.children[0].data.name);}
         return bot.submit(mirrorSub, 'link',
@@ -85,25 +87,39 @@ function reportRemoval(post, mirror) {delete(reportQueue[post.name]);
   var url = bot.baseUrl + post.permalink;
   if (post.author === '[deleted]') {return RSVP.resolve();}
   return bot.submitted(reportSub, entities.decode(url)).then(function(submitted) {
-    if (typeof submitted === 'object') {return;}
-    return bot.submit(reportSub, 'link', entities.decode(post.title), url
-    ).then(function(report) {return bot.byId(report.name);}).then(function(report) {
-      return bot.comments(post.permalink).then(function(comments) {
-        var comment = (comments.filter(function(j) {return !!j.data.distinguished;}).pop() || {}).data;
-        var flairClass = 'removed'; if (post.link_flair_text || comment) {flairClass = 'flairedremoval';}
-        var ctx = {
-          post: decodePost(post), 
-          report: decodePost(report), 
-          mirror: decodePost(mirror), 
-          modComment:comment
-        };
-        var tasks = [
-          bot.flair(report.subreddit, report.name, flairClass, post.subreddit+'|'+post.author),
-          bot.flair(mirror.subreddit, mirror.name, 'removed', mirror.link_flair_text)
-        ];
-        if (flairClass !== 'removed') {tasks.push(bot.comment(report.name, templates.report(ctx)));}
-        return RSVP.all(tasks);
-      });
+    if (typeof submitted === 'object') {return bot.byId(submitted[0].data.children[0].data.name);}
+    return bot.submit(reportSub, 'link', entities.decode(post.title), url);
+  }).then(function(report) {return bot.byId(report.name);}).then(function(report) {
+    return bot.comments(post.permalink).then(function(comments) {
+      var comment = (comments.filter(function(j) {return !!j.data.distinguished;}).pop() || {}).data;
+      var flairClass = 'removed'; if (post.link_flair_text || comment) {flairClass = 'flairedremoval';}
+      var ctx = {
+        post: decodePost(post), 
+        report: decodePost(report), 
+        mirror: decodePost(mirror), 
+        modComment:comment
+      };
+      var tasks = [
+        bot.flair(report.subreddit, report.name, flairClass, post.subreddit+'|'+post.author),
+        bot.flair(mirror.subreddit, mirror.name, 'removed', mirror.link_flair_text)
+      ];
+      if (flairClass !== 'removed') {
+        return bot.comments(report.permalink).then(function(comments) {
+          return comments.map(function(j) {return j.data;}).filter(function(j) {return j.author===bot.user;})[0];
+        }).then(function(botComment) {
+          var body = templates.report(ctx);
+          if (!body.trim()) {return RSVP.all(tasks);}
+          if (botComment) {
+            if (botComment.body.trim() !== body.trim()) {
+              tasks.push(bot.editusertext(botComment.name, body));
+            }
+          } else {
+            tasks.push(bot.comment(report.name, body));
+          }
+          return RSVP.all(tasks);
+        });
+      }
+      return RSVP.all(tasks);
     });
   }).catch(function(error) {if ((error+'').match(/shadowban/)) {return;} throw error;});
 }
@@ -124,7 +140,8 @@ function update(mirror, knownPost) {delete(updateQueue[mirror.name]);
     while (match = reg.exec(body)) {matches.push(match[1]);} 
     return _.uniq(matches.map(normUrl));
   }
-  bot.knownUrls[mirror.url] = true;
+  if (!mirror.is_self && mirror.url) {bot.knownUrls[mirror.url] = true;}
+  
   return bot.comments(mirror.permalink).then(function(comments) {
     return comments.map(function(j) {return j.data;}).filter(function(j) {return j.author===bot.user;})[0];
   }).then(function(botComment) {
@@ -159,6 +176,7 @@ function update(mirror, knownPost) {delete(updateQueue[mirror.name]);
         return posts.filter(function(post) {
           if (post.author === '[deleted]') {return false;}
           if (post.is_self) {
+            missing.push(normUrl(post.permalink));
             if (post.selftext || !post.selftext_html || !post.selftext_html.match('removed')) {return false;}
           }
           return true;
@@ -167,7 +185,7 @@ function update(mirror, knownPost) {delete(updateQueue[mirror.name]);
     }).then(function(detectedRemovals) {var postData = {};
       if (!(missing.length || !detectedRemovals.length)) {return;}
       removed = _.union(removed, detectedRemovals); 
-      knownPosts = _.difference(knownPosts, removed);
+      knownPosts = _.difference(_.union(knownPosts, missing), removed);
       return RSVP.all(detectedRemovals.map(getPost)).then(function(posts) {
         posts.forEach(function(post) {reportQueue[post.name] = {post: post, mirror: mirror};});
       }).then(function() {
@@ -178,8 +196,10 @@ function update(mirror, knownPost) {delete(updateQueue[mirror.name]);
             postData.removed = j.map(decodePost);
           })
         ]).then(function() {return templates.mirror(postData);}).then(function(body) {
+          if (!body.trim()) {return;}
           if (!botComment) {return bot.comment(mirror.name, body);}
-          else if (body.trim() !== botComment.body.trim()) {return bot.editusertext(botComment.name, body);}
+          else if (body.trim() !== entities.decode(botComment.body.trim())) {
+            return bot.editusertext(botComment.name, body);}
         });
       });
     });

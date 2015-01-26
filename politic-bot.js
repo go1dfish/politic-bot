@@ -1,13 +1,14 @@
 var RSVP = require('rsvp'), fs = require('fs'), Handlebars = require('handlebars'), Nodewhal = require('nodewhal');
 var _ = require('underscore'), config = require('./config'), pkg = require('./package');
 var mirrorSub = config.mirrorSubreddit.toLowerCase(), reportSub = config.reportSubreddit.toLowerCase();
-var subreddits = [], botSubs = [mirrorSub, reportSub], schedule = Nodewhal.schedule; 
+var subreddits = [], botSubs = [mirrorSub, reportSub], schedule = Nodewhal.schedule;
 config.userAgent = pkg.name+'/'+pkg.version+' by '+pkg.author;
 botSubs = botSubs.map(function(j) {return j.toLowerCase();});
 
 require('./main')(config, {
   mirror: Handlebars.compile(fs.readFileSync('./templates/mirror.md.hbs')+''),
   report: Handlebars.compile(fs.readFileSync('./templates/report.md.hbs')+''),
+  comments: Handlebars.compile(fs.readFileSync('./templates/comments.md.hbs')+'')
 }, function(bot, mirrorFunc) {
   var handled = {}, linkMap = {};
   function getPost(url) {return bot.byId('t3_' + url.split('/comments/').pop().split('/')[0]);}
@@ -19,7 +20,7 @@ require('./main')(config, {
         return RSVP.all(posts.map(function(post) {
           linkMap[post.url] = linkNames = _.without(linkNames, post.name);
           return mirrorFunc(post);
-        })); 
+        }));
       }).catch(function(err) {console.error(err.stack || err);});
     }
     return mirrorFunc(post);
@@ -41,12 +42,12 @@ require('./main')(config, {
           return bot.byId(name).then(mirror);
         }); if (posts.length) {return RSVP.all(posts);}
       })
-    ]); 
+    ]);
   }, 60*1000), schedule.repeat(function() {
     return bot.get(bot.baseUrl + '/api/multi/mine').then(function(data) {
       return data.map(function(i) {
         if (i.data.name.toLowerCase() === 'blacklist') {
-          config.blacklist = i.data.subreddits.map(function(j) {return j.name;});   
+          config.blacklist = i.data.subreddits.map(function(j) {return j.name;});
           return [];
         }
         return i.data.subreddits;
@@ -69,7 +70,7 @@ require('./main')(config, {
         return mirror(post);
       });
     } else if (postTitle.match(bot.user.toLowerCase())) {mirror(post);}
-    else if (postSelf && subreddits.filter(function(j) {return postSelf.match('/r/'+j);}).length) {mirror(post);} 
+    else if (postSelf && subreddits.filter(function(j) {return postSelf.match('/r/'+j);}).length) {mirror(post);}
     else if (postSelf && botSubs.filter(function(j) {return postSelf.match('r/'+j);}).length) {mirror(post);}
     else if (postSelf && postSelf.match(bot.user.toLowerCase())) {mirror(post);}
     else if (!_.contains(botSubs, postSub)) {var linkNames = linkMap[post.url] = linkMap[post.url] || [];

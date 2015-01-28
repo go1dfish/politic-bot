@@ -1,4 +1,4 @@
-var RSVP = require('rsvp'), fs = require('fs'), Handlebars = require('handlebars'),
+var RSVP = require('rsvp'), fs = require('fs'), Handlebars = require('handlebars');
 var PoliticBot = require('./lib/main');
 config = require('./config'), pkg = require('./package'), templates = {};
 config.userAgent = pkg.name+'/'+pkg.version+' by '+pkg.author;
@@ -13,12 +13,12 @@ PoliticBot(config, function(bot) {
   return RSVP.all([
     PoliticBot.otherDiscussions(bot, templates),
     PoliticBot.mirrorTopic(bot),
-    PoliticBot.commander(bot, templates).pollForCommands({
+    PoliticBot.commander(bot, templates).pollForCommands(null, {
       postRemovedComments: function(user, reportSub, depth) {
         console.log('postRemovedComments', user, reportSub, depth);
         if (!user || !reportSub) {return;}
         return commentRemovals.checkUser(user, reportSub, depth);
       }
-    });
+    })
   ]);
 });

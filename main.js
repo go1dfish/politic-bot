@@ -3,15 +3,14 @@ var RSVP = require('rsvp'), Nodewhal = require('nodewhal'), _ = require('undersc
 var entities = new (require('html-entities').AllHtmlEntities)();
 var bot = Nodewhal(cfg.userAgent), schedule = Nodewhal.schedule;
 var submissionQueue = [], reportQueue = {}, updateQueue = {}, knownPostNames = {}; 
-var reportSub = cfg.reportSubreddit, mirrorSub = cfg.mirrorSubreddit, minAuthorAge = cfg.minAuthorAge;
+var reportSub = cfg.reportSubreddit, mirrorSub = cfg.mirrorSubreddit;
 bot.config = cfg; bot.knownUrls = {};
 console.log('\n   ======= ' + cfg.user + ' | ' + cfg.userAgent + ' =======\n');
 
 if (!trackNewPosts) {trackNewPosts = function() {return RSVP.resolve();};}
-return bot.login(cfg.user, cfg.password).then(function() {return fetchMirrors(1000, true);}).then(function() {
+return bot.login(cfg.user, cfg.password).then(function() {
   return fetchMirrors(10).then(function() {return RSVP.all([
-    trackNewPosts(bot, newPost), mainLoop(), mainLoop(), 
-    schedule.wait(24*60*60*1000).then(function() {return schedule.repeat(fetchMirrors, 24*60*60*1000);})
+    trackNewPosts(bot, newPost), mainLoop(), mainLoop(), schedule.repeat(fetchMirrors, 6*60*60*1000)
   ]);});
 }).catch(function(error) {console.error("Err", error);});
 
@@ -57,6 +56,15 @@ function newPost(post) {
   }
 }
 
+function quoteComment(comment) {
+  if (!comment) {return;}
+  var body = comment.body || '';
+  comment.quoted = body.split('\n').map(function(line) {
+    return '> ' + line;
+  }).join('\n');
+  return comment;
+}
+
 function decodePost(post) {
   post.title = entities.decode(post.title);
   if (post.selftext) {
@@ -67,19 +75,16 @@ function decodePost(post) {
 
 function mirrorPost(post) {
   if (post && post.author !== '[deleted]') {
-    return bot.aboutUser(post.author).then(function(author) {
-      if ((post.created_utc - author.created_utc) < minAuthorAge) {return;}
-      if (!post.is_self && post.url) {bot.knownUrls[post.url] = true;}
-      return bot.submitted(mirrorSub, entities.decode(post.url)).then(function(submitted) {
-        if (typeof submitted === 'object') {return bot.byId(submitted[0].data.children[0].data.name);}
-        return bot.submit(mirrorSub, 'link',
-          entities.decode(post.title), entities.decode(post.url)
-        ).then(function(j) {return bot.byId(j.name);}).then(function(mirror) {
-          return bot.flair(mirrorSub, mirror.name, 'meta', 'r/'+post.subreddit)
-            .then(function() {return mirror;});
-        });
-      }).then(function(mirror) {return update(mirror, post);});
-    }).catch(function(err) {if (err === 'usermissing') {return;} throw err;});
+    if (!post.is_self && post.url) {bot.knownUrls[post.url] = true;}
+    return bot.submitted(mirrorSub, entities.decode(post.url)).then(function(submitted) {
+      if (typeof submitted === 'object') {return bot.byId(submitted[0].data.children[0].data.name);}
+      return bot.submit(mirrorSub, 'link',
+        entities.decode(post.title), entities.decode(post.url)
+      ).then(function(j) {return bot.byId(j.name);}).then(function(mirror) {
+        return bot.flair(mirrorSub, mirror.name, 'meta', 'r/'+post.subreddit)
+          .then(function() {return mirror;});
+      });
+    }).then(function(mirror) {return update(mirror, post);});
   } else {return RSVP.resolve();}
 }
 
@@ -97,7 +102,7 @@ function reportRemoval(post, mirror) {delete(reportQueue[post.name]);
         post: decodePost(post), 
         report: decodePost(report), 
         mirror: decodePost(mirror), 
-        modComment:comment
+        modComment: quoteComment(comment)
       };
       var tasks = [
         bot.flair(report.subreddit, report.name, flairClass, post.subreddit+'|'+post.author),
@@ -149,8 +154,8 @@ function update(mirror, knownPost) {delete(updateQueue[mirror.name]);
     var blacklist = (bot.config.blacklist || []).concat([reportSub, mirrorSub]);
     blacklist = blacklist.map(function(j) {return j.toLowerCase();});
     if (botComment) {
-      removed = getLinks(botComment.body, /(?:^ \* ~~\[\/r\/.*\]\()(.*)(?:\)~~)/mg);
-      knownPosts = _.union(removed, getLinks(botComment.body, /(?:^ \* \[\/r\/.*\]\()(.*)(?:\))/mg));
+      removed = getLinks(botComment.body, /(?:^ \* ~~\[\/r\/.*?\]\()(.*?)(?:\)~~)/mg);
+      knownPosts = _.union(removed, getLinks(botComment.body, /(?:^ \* \[\/r\/.*?\]\()(.*?)(?:\))/mg));
     }
     if (knownPost) {
       var knownPostPermalink = normUrl(knownPost.permalink);

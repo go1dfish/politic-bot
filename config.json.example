@@ -2,6 +2,5 @@
   "user":             "yourusername",
   "password":         "yourpassword",
   "mirrorSubreddit":  "POLITIC",
-  "reportSubreddit":  "ModerationLog",
-  "minAuthorAge":     3600000
+  "reportSubreddit":  "ModerationLog"
 }

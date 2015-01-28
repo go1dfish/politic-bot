@@ -1,10 +1,17 @@
 
-[Removed from /r/{{post.subreddit}}]({{report.url}}) {{#if post.link_flair_text}}[{{post.link_flair_text}}]{{/if}}
-
+# [Removed from /r/{{post.subreddit}}]({{report.url}}) {{#if post.link_flair_text}}[{{post.link_flair_text}}]{{/if}}
 {{#if modComment}}
-  # --- Begin /r/{{post.subreddit}} Moderator Comment ---
+---
 
-  {{modComment.body}}
+#### Begin Moderator Comment
 
-  # --- End /r/{{post.subreddit}} Moderator Comment ---
+---
+
+{{modComment.body}}
+
+---
+
+#### End Moderator Comment
+
+---
 {{/if}}

@@ -157,6 +157,7 @@ function update(mirror, knownPost) {delete(updateQueue[mirror.name]);
       postMap[knownPostPermalink] = knownPost;
       if (!_.contains(knownPosts, knownPostPermalink)) {knownPosts.push(knownPostPermalink);}
     }
+    mirror.dupeslink = mirror.permalink.replace(/\/comments\//, '/duplicates/');
     return bot.duplicates(mirrorSub, mirror.name).then(function(duplicates) {
       return _.union.apply(_, duplicates.map(function(listing) {
         if (!listing || !listing.data || !listing.data.children) {return [];}
@@ -182,7 +183,7 @@ function update(mirror, knownPost) {delete(updateQueue[mirror.name]);
           return true;
         }).map(function(post) {return normUrl(post.permalink);});
       });
-    }).then(function(detectedRemovals) {var postData = {};
+    }).then(function(detectedRemovals) {var postData = {mirror:mirror};
       if (!(missing.length || !detectedRemovals.length)) {return;}
       removed = _.union(removed, detectedRemovals); 
       knownPosts = _.difference(_.union(knownPosts, missing), removed);

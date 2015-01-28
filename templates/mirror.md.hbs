@@ -1,5 +1,5 @@
 
-{{#if dupes.length}}# other discussions ({{dupes.length}})
+{{#if dupes.length}}#### [other discussions ({{dupes.length}})]({{mirror.dupeslink}})
 {{/if}}
 {{#each dupes}} * [/r/{{subreddit}} : {{title}}]({{permalink}}) {{#if link_flair_text}}[{{link_flair_text}}]{{/if}}
 {{/each}}{{#each removed}} * ~~[/r/{{subreddit}} : {{title}}]({{permalink}})~~ **[REMOVED{{#if link_flair_text}} {{link_flair_text}}{{/if}}]**

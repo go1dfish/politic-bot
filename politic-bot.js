@@ -5,10 +5,14 @@ var subreddits = [], botSubs = [mirrorSub, reportSub], schedule = Nodewhal.sched
 config.userAgent = pkg.name+'/'+pkg.version+' by '+pkg.author;
 botSubs = botSubs.map(function(j) {return j.toLowerCase();});
 
+function tpl(name) {
+  return function(ctx) {
+    return Handlebars.compile(fs.readFileSync('./templates/'+name+'.md.hbs')+'')(ctx);
+  }
+}
+
 require('./main')(config, {
-  mirror: Handlebars.compile(fs.readFileSync('./templates/mirror.md.hbs')+''),
-  report: Handlebars.compile(fs.readFileSync('./templates/report.md.hbs')+''),
-  comments: Handlebars.compile(fs.readFileSync('./templates/comments.md.hbs')+'')
+  mirror: tpl('mirror'), report: tpl('report'), comments: tpl('comments')
 }, function(bot, mirrorFunc) {
   var handled = {}, linkMap = {};
   function getPost(url) {return bot.byId('t3_' + url.split('/comments/').pop().split('/')[0]);}

@@ -1,8 +1,8 @@
 {
   "name": "politic-bot",
-  "version": "0.5.5",
-  "description": "Reddit bots /u/ModerationLog and /u/PoliticBot",
-  "main": "main.js",
+  "version": "0.6.0",
+  "description": "Reddit bot /u/PoliticBot powers /r/POLITIC and /r/ModerationLog",
+  "main": "lib/main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "forever start -a -l politic-bot.log -o out.log -e err.log --minUptime 1000 --spinSleepTime 1000 politic-bot.js",

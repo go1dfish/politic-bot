@@ -1,6 +1,8 @@
 {
-  "user":             "yourusername",
-  "password":         "yourpassword",
+  "user":             "reddit_bot",
+  "password":         "snoo",
   "mirrorSubreddit":  "POLITIC",
-  "reportSubreddit":  "ModerationLog"
+  "reportSubreddit":  "ModerationLog",
+  "oAuthKey": "p-jcoLKBynTLew",
+  "oAuthSecret": "gko_LXELoV07ZBNUXrvWZfzE3aI"
 }

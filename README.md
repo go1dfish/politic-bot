@@ -7,6 +7,7 @@ Used to power [/r/POLITIC](http://reddit.com/r/POLITIC) and [/r/ModerationLog](h
 ## Requirements
 
  * A reddit account capable of posting/commenting without captchas
+   * OAUTH2 Script access https://github.com/reddit/reddit/wiki/OAuth2-Quick-Start-Example
    * (optional) All multi-reddits on the account are used to find topical posts
      * Except multi's named "blacklist" these are used to exclude subs like SuicideWatch from mirroring
  * Two subreddits the account has mod priviledges for

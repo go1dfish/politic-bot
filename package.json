@@ -1,6 +1,6 @@
 {
   "name": "politic-bot",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Reddit bot /u/PoliticBot powers /r/POLITIC and /r/ModerationLog",
   "main": "lib/main.js",
   "scripts": {
@@ -9,13 +9,13 @@
     "stop": "forever stop politic-bot.js"
   },
   "dependencies": {
-    "nodewhal": "git://github.com/go1dfish/nodewhal.git#master",
     "reddit-stream": "git://github.com/go1dfish/reddit-stream.git#master",
     "eventsource": "0.0.10",
     "handlebars": "1.1.2",
-    "html-entities": "1.0.10",
     "rsvp": "3.0.16",
-    "underscore": "^1.7.0"
+    "underscore": "^1.7.0",
+    "snoocore": "^2.3.2",
+    "eventsource": "0.0.10"
   },
   "author": "go1dfish",
   "licenses": [

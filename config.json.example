@@ -3,6 +3,7 @@
   "password":         "snoo",
   "mirrorSubreddit":  "POLITIC",
   "reportSubreddit":  "ModerationLog",
+  "commentSubreddit": "RemovedComments",
   "oAuthKey": "p-jcoLKBynTLew",
   "oAuthSecret": "gko_LXELoV07ZBNUXrvWZfzE3aI"
 }

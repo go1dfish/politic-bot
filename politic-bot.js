@@ -12,8 +12,6 @@ PoliticBot(config, function(bot) {
   var commentRemovals = PoliticBot.commentRemovals(bot, templates);
   return RSVP.all([
     PoliticBot.otherDiscussions(bot, templates),
-    PoliticBot.otherDiscussions(bot, templates),
-    PoliticBot.otherDiscussions(bot, templates),
     PoliticBot.mirrorTopic(bot),
     PoliticBot.postRemovals(bot, templates),
     /*PoliticBot.commander(bot, templates).pollForCommands(null, {

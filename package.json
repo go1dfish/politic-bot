@@ -13,6 +13,7 @@
     "eventsource": "0.0.10",
     "handlebars": "1.1.2",
     "rsvp": "3.0.16",
+    "superagent": "0.18.0",
     "underscore": "^1.7.0",
     "snoocore": "^2.3.2",
     "eventsource": "0.0.10"

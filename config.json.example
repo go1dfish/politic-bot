@@ -4,6 +4,7 @@
   "mirrorSubreddit":  "POLITIC",
   "reportSubreddit":  "ModerationLog",
   "commentSubreddit": "RemovedComments",
+  "userSubreddit": "RemovedUsers",
   "oAuthKey": "p-jcoLKBynTLew",
   "oAuthSecret": "gko_LXELoV07ZBNUXrvWZfzE3aI"
 }

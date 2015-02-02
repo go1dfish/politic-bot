@@ -1,10 +1,4 @@
-
-{{#if dupes.length}}#### [other discussions ({{dupes.length}})]({{mirror.dupeslink}})
-{{/if}}
-{{#each dupes}} * [/r/{{subreddit}} : {{title}}]({{permalink}}) *({{score}}|{{num_comments}})* {{#if link_flair_text}}[{{link_flair_text}}]{{/if}}
-{{/each}}{{#if removed.length}}
-###### {{removed.length}} [removed]
-{{#each removed}} * ~~[/r/{{subreddit}} : {{title}}]({{permalink}})~~ *({{score}}|{{num_comments}})* {{#if link_flair_text}}[{{link_flair_text}}]{{/if}}
-{{/each}}
 ^(**I don't remove posts!** This bot detects missing posts that aren't *[deleted]*)
-{{/if}}
+
+{{#each removed}} * ~~[{{score}} /r/{{subreddit}} {{num_comments}} comments: {{title}}]({{permalink}})~~ {{#if link_flair_text}}[{{link_flair_text}}]{{/if}}
+{{/each}}

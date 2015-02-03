@@ -11,6 +11,7 @@ config.userAgent = pkg.name+'/'+pkg.version+' by '+pkg.author;
 PoliticBot(config, function(bot) {
   var commentRemovals = PoliticBot.commentRemovals(bot, templates);
   return RSVP.all([
+    PoliticBot.ingest(bot).eventStream(),
     PoliticBot.otherDiscussions(bot, templates),
     PoliticBot.mirrorTopic(bot),
     PoliticBot.postRemovals(bot, templates),
@@ -22,7 +23,6 @@ PoliticBot(config, function(bot) {
         return bot.byId(id).then(bot.mirrorPostNow);
       }
     }),
-    commentRemovals.pollForComments(),
     commentRemovals.pollForRemovals(),
     commentRemovals.gatherCommentIds(),
     PoliticBot.schedule.repeat(function() {

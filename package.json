@@ -15,7 +15,7 @@
     "lokijs": "1.1.14",
     "rsvp": "3.0.16",
     "snoocore": "^2.3.2",
-    "superagent": "0.18.0",
+    "superagent": "^0.21.0",
     "underscore": "^1.7.0"
   },
   "author": "go1dfish",

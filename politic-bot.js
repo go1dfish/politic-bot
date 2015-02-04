@@ -13,7 +13,7 @@ PoliticBot(config, function(bot) {
   var ingest = PoliticBot.ingest(bot);
   return ingest.db.then(function(db) {
     return RSVP.all([
-      ingest.eventStream(20000, 200000),
+      ingest.eventStream(1000, 10000),
       PoliticBot.otherDiscussions(bot, templates),
       PoliticBot.mirrorTopic(bot),
       PoliticBot.postRemovals(bot, templates),

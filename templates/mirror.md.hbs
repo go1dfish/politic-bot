@@ -1,9 +1,10 @@
-{{#if removed.length}}
-###### {{removed.length}} links removed
-{{/if}}
-{{#each removed}} * ~~[{{score}} /r/{{subreddit}} {{num_comments}} comments: {{title}}]({{permalink}})~~ {{#if link_flair_text}}[{{link_flair_text}}]{{/if}}
-{{/each}}
+---
 
+{{#each removed}} * ~~[{{score}} /r/{{subreddit}} {{num_comments}} comments]({{permalink}})~~ {{#if link_flair_text}}[{{link_flair_text}}]{{/if}}
+{{/each}}
+{{#if removed.length}}
+---
+{{/if}}
 ###### [{{comments.length}} out of {{comments.total}} (%**{{comments.percentageRemoved}}**) comments detected [removed]]({{comments.permalink}}) ^(**{{comments.known}}**)
 {{#each comments}} * {{links_md}}
 {{/each}}

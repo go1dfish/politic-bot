@@ -5,7 +5,7 @@
   "main": "lib/main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "forever start -a -l politic-bot.log -o out.log -e err.log --minUptime 1000 --spinSleepTime 30000 politic-bot.js",
+    "start": "forever start -a -l politic-bot.log -o out.log -e err.log --minUptime 1000 --spinSleepTime 30000 --killSignal=SIGTERM politic-bot.js",
     "stop": "forever stop politic-bot.js"
   },
   "dependencies": {
@@ -13,6 +13,7 @@
     "express": "4.4.5",
     "handlebars": "1.1.2",
     "lokijs": "1.1.14",
+    "moment": "^2.9.0",
     "rsvp": "3.0.16",
     "snoocore": "^2.3.2",
     "superagent": "^0.21.0",

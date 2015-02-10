@@ -1,7 +1,7 @@
 node_modules
 npm-debug.log
 config.json
-ingest.json
+ingest
 err.log
 out.log
 *.swp

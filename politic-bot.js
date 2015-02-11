@@ -3,7 +3,7 @@ var PoliticBot = require('./lib/main'), _ = require('underscore');
 var snoochives = require('snoochives');
 config = require('./config'), pkg = require('./package'), templates = {};
 config.userAgent = pkg.name+'/'+pkg.version+' by '+pkg.author;
-['mirror', 'report', 'comment'].forEach(function(name) {
+['mirror', 'report', 'comment', 'livecomment', 'livepost'].forEach(function(name) {
   templates[name] = function(ctx) {
     return Handlebars.compile(fs.readFileSync('./templates/'+name+'.md.hbs')+'')(ctx);
   }

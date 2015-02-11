@@ -1,16 +1,16 @@
 {{#if removed.length}}
-### {{removed.length}} [removed]
+### {{removed.length}} [removed] links
 {{#each removed}} * ~~[{{score}} /r/{{subreddit}} {{num_comments}} comments]({{permalink}})~~ {{#if link_flair_text}}[{{link_flair_text}}]{{/if}}
 {{/each}}
 ---
 {{/if}}
 {{#if removed.related.length}}
-### {{removed.related.length}} Related Post Removals
+### {{removed.related.length}} related link removals
 {{#each related}} * [{{title}}]({{url}})
 {{/each}}
 ---
 {{/if}}
-### [Comments: **{{comments.percentageRemoved}}**% [removed] {{comments.length}} out of {{comments.total}}]({{comments.permalink}}) ^(*{{comments.known}}*)
+### [comments: **{{comments.percentageRemoved}}**% [removed] {{comments.length}} out of {{comments.total}}]({{comments.permalink}}) ^(*{{comments.known}}*)
 {{#each dspComments}} * {{links_md}}
 {{/each}}
 

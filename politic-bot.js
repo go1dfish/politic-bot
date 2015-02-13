@@ -13,8 +13,8 @@ process.setMaxListeners(1000);
 
 PoliticBot(config, function(bot) {
   bot.data = snoochives(bot.api, 'ingest', {
-    t1: {depth: 500000, extra: ['author']},
-    t3: {depth: 10000, extra: ['url', 'is_self']}
+    t1: {depth: 10000, extra: ['author']},
+    t3: {depth: 1000, extra: ['url', 'is_self']}
   }, PoliticBot.schedule);
 
   return bot.data.promise.then(function() {
@@ -30,10 +30,7 @@ PoliticBot(config, function(bot) {
           });
         }
       }),
-      PoliticBot.commentRemovals(bot, templates),
-      PoliticBot.schedule.repeat(function() {
-        if (!Object.keys(bot.updateQueue).length) {return bot.fetchMirrors();} return RSVP.resolve();
-      })
+      PoliticBot.commentRemovals(bot, templates)
     ]);
   });
 });

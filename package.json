@@ -1,21 +1,22 @@
 {
   "name": "politic-bot",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Reddit bot /u/PoliticBot powers /r/POLITIC and /r/ModerationLog",
   "main": "lib/main.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "forever start -a -l politic-bot.log -o out.log -e err.log --minUptime 1000 --spinSleepTime 30000 --killSignal=SIGTERM politic-bot.js",
+    "start": "forever start -a -l politic-bot.log -o logs/out.log -e logs/err.log --minUptime 1000 --spinSleepTime 30000 --killSignal=SIGTERM politic-bot.js",
     "stop": "forever stop politic-bot.js"
   },
   "dependencies": {
     "eventsource": "0.0.10",
     "express": "4.4.5",
     "handlebars": "1.1.2",
+    "html-entities": "^1.1.2",
     "lokijs": "1.1.14",
     "moment": "^2.9.0",
     "rsvp": "3.0.16",
-    "snoocore": "^2.5.0",
+    "snoocore": "^2.6.0",
     "superagent": "^0.21.0",
     "underscore": "^1.7.0"
   },

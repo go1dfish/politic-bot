@@ -1,6 +1,6 @@
 {
   "name": "politic-bot",
-  "version": "0.10.2",
+  "version": "1776.07.04",
   "description": "Reddit bot /u/PoliticBot powers /r/POLITIC and /r/ModerationLog",
   "main": "lib/main.js",
   "scripts": {
@@ -16,7 +16,7 @@
     "lokijs": "1.1.14",
     "moment": "^2.9.0",
     "rsvp": "3.0.16",
-    "snoocore": "^2.6.0",
+    "snoocore": "^2.7.1",
     "superagent": "^0.21.0",
     "underscore": "^1.7.0"
   },

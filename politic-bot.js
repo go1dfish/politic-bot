@@ -9,7 +9,47 @@ config.userAgent = pkg.name+'/'+pkg.version+' by '+pkg.author;
   }
 });
 
-process.setMaxListeners(1000);
+var playlist = [
+  {
+    url: 'https://www.youtube.com/watch?v=VWgsdexkv18&index=10&list=RDp5mmFPyDK_8',
+    title: 'Gory Gory What a Helluva Way To Die'
+  }
+];
+
+var keywords = [
+  'pao',
+  'kn0thing',
+  'fletcher',
+  'subredditcancer',
+  'fletcher',
+  'getfairshare',
+  'fairshare',
+  'politicbot',
+  'moderationlog',
+  '美国鬼子',
+  'social.justice',
+  'sjw',
+  'safe.space',
+  'safespace',
+  '"safe" space',
+  'shadowban',
+  'moderation',
+  'cabal',
+  'defaultmods',
+  'modtalk',
+  'publicmodlogs',
+  'modlog.github',
+  'modlogs.github',
+  'yishan',
+  'topmindsofreddit',
+  'politicbot',
+  'r\/snew',
+  'freeze peaches',
+  'davidreiss666',
+  'ky1e',
+  'BritishEnglishPolice',
+  '\/oppression'
+];
 
 PoliticBot(config, function(bot) {
   bot.data = snoochives(bot.api, 'ingest', {
@@ -17,20 +57,35 @@ PoliticBot(config, function(bot) {
     t3: {depth: 1000, extra: ['url', 'is_self']}
   }, PoliticBot.schedule);
 
-  return bot.data.promise.then(function() {
-    return RSVP.all([
-      PoliticBot.otherDiscussions(bot, templates),
-      PoliticBot.mirrorTopic(bot),
-      PoliticBot.postRemovals(bot, templates),
-      PoliticBot.commander(bot, templates).pollForCommands(null, {
-        check: function(id) {if (!id) {return;} console.log('check', id);
-          if (id.match(/^http/)) {return bot.mirrorUrlNow(id);}
-          return bot.byId(id).then(function(post) {
-            return bot.mirrorUrl(post.url);
-          });
-        }
-      }),
-      PoliticBot.commentRemovals(bot, templates)
-    ]);
+  bot.data.on('t1', function(item) {
+    if (!keywords.filter(function(word) {
+      if (item.author === '-moose') {return;}
+      if (!!(item.title || '').match(new RegExp(word))) {return true;}
+      if (!!(item.link_title || '').match(new RegExp(word))) {return true;}
+      if (!!(item.body || '').match(new RegExp(word))) {return true;}
+      if (!!(item.author || '').match(new RegExp(word))) {return true;}
+    }).length) {return;}
+
+    if (item.parent_id) {
+      item.permalink = 'https://www.reddit.com/r/' + item.subreddit + '/comments/' + item.link_id.split('_').pop() + '/_/' + item.id;
+    }
+
+    var maosig = [
+      "---",
+      "> [What is the sound of one hand clapping?](https://www.youtube.com/watch?v=TQ7qLwVL7CA)",
+      "# [—  文革中的机器毛 ಠ_ಠ](/u/go1dfish/m/readme)",
+      "    Would you like to play another game?",
+      "**/r/redditpolicy /r/bringbackreddit or /r/GASTHESNOO**",
+      "# [WE SHALL OVERCOME!](https://www.youtube.com/watch?v=IzRhFH5OyHo&list=RDp5mmFPyDK_8&index=5) - [美国鬼子ಠ_ಠ](https://zh.reddit.com/r/POLITIC/comments/37ovia/politicbot_was_shadowbanned_yesterday_for_spam/)"
+    ].join('\n\n');
+
+    bot.liveUpdate(
+      'uocz16gmx2s7',
+      [
+        '[From](' + 'https://zh.reddit.com/api/info?id=' + item.name + '): /u/' + item.author + ' /r/' + item.subreddit,
+        item.permalink,
+        maosig
+      ].join('\n\n')
+    );
   });
 });

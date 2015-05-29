@@ -68,6 +68,8 @@ PoliticBot(config, function(bot) {
 
     if (item.parent_id) {
       item.permalink = 'https://www.reddit.com/r/' + item.subreddit + '/comments/' + item.link_id.split('_').pop() + '/_/' + item.id;
+    } else {
+      item.permalink = 'https://www.reddit.com/r/' + item.subreddit + '/comments/' + item.name + '/_/';
     }
 
     var maosig = [
